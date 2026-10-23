@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 158a787b3d6bee841b92432142fe0bf9, type: 3}
+  m_Name: email_05
+  m_EditorClassIdentifier: Assembly-CSharp::Pete.Data.EmailDataSO
+  emailId: email_05
+  senderName: VIP Global Arbitrage
+  senderEmail: invest@vip-crypto-bot.top
+  subject: 15% Daily ROI automated crypto bot!
+  bodyText: Deposit just $100 and let our AI bot generate passive daily returns. Over 10,000 satisfied investors. Register now before spots run out!
+  hasUrl: 1
+  urlDisplay: http://vip-crypto-arbitrage.top/deposit
+  websitePreviewImage: {fileID: 0}
+  isScam: 1
+  targetHour: 4
+  targetMinute: 45

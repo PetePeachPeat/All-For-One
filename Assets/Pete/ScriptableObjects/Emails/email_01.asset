@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 158a787b3d6bee841b92432142fe0bf9, type: 3}
+  m_Name: email_01
+  m_EditorClassIdentifier: Assembly-CSharp::Pete.Data.EmailDataSO
+  emailId: email_01
+  senderName: TechInno Recruitment
+  senderEmail: hr@techinno-group.com
+  subject: 'Application Status: Remote Support Specialist'
+  bodyText: 'Dear Applicant,
+
+
+    We would like to invite you for a virtual interview for the Remote Support Specialist role ($3,200/month). Please review the job specification on our portal.'
+  hasUrl: 1
+  urlDisplay: https://careers.techinno-group.com/jobs/it-support
+  websitePreviewImage: {fileID: 0}
+  isScam: 0
+  targetHour: 0
+  targetMinute: 10

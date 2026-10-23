@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f6f29ff97063db541b805cee6b8a9e4b, type: 3}
+  m_Name: call_01_job
+  m_EditorClassIdentifier: Assembly-CSharp::Pete.Data.PhoneCallDataSO
+  callId: call_01
+  callerName: HR - Nexus Technologies
+  callerNumber: 02-555-0199
+  callType: 0
+  dialogueLines:
+  - Hello, this is HR from Nexus Technologies.
+  - We reviewed your resume for the Junior Remote IT Support role. Are you still interested in joining our team?
+  voiceClip: {fileID: 0}
+  isScam: 0
+  targetHour: 1
+  targetMinute: 15

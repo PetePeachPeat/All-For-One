@@ -67,6 +67,6 @@
         "*.sln": "*.csproj",
         "*.slnx": "*.csproj"
     },
-    "dotnet.defaultSolution": "All-For-One.slnx",
+    "dotnet.defaultSolution": "All For One.slnx",
     "dotnet.enableWorkspaceBasedDevelopment": false
 }
