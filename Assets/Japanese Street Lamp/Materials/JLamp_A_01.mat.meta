@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 8620560a0cd5f4b40a5a781a1f1589eb
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 68184
+  packageName: Japanese Street Lamp
+  packageVersion: 1.3.0
+  assetPath: Assets/Japanese Street Lamp/Materials/JLamp_A_01.mat
+  uploadId: 1024380
