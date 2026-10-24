@@ -12,11 +12,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e36427a90be7b5b43b1ee5265b6f609b, type: 3}
   m_Name: GameNightConfig
   m_EditorClassIdentifier: Assembly-CSharp::Pete.Data.GameNightConfigSO
-  realSecondsPerHour: 60
+  realSecondsPerHour: 30
   startHour: 0
   endHour: 6
   ghostCountdownSeconds: 7
   debuffDurationSeconds: 35
+  maxSanity: 100
+  sanityPenaltyGhostFail: 30
+  sanityPenaltyScamAccepted: 20
+  sanityPenaltyJobMissedOrDeclined: 10
+  sanityRewardCorrectAction: 10
+  sanityRewardGhostSurvived: 15
+  sanityCloseEyesRestorePerSecond: 7
   minScoreForGoodEnd: 3
   maxScamAcceptedForBadEnd: 2
   goodEndingArt: {fileID: 0}

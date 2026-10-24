@@ -15,6 +15,7 @@ namespace Pete.Systems
         public int CurrentHour { get; private set; } = 0;
         public int CurrentMinute { get; private set; } = 0;
         public bool IsNightEnded { get; private set; } = false;
+        public bool IsNightActive => !IsNightEnded;
 
         private float minuteTimer = 0f;
         private float secondsPerMinute = 1f;
@@ -36,14 +37,12 @@ namespace Pete.Systems
             if (config != null)
             {
                 CurrentHour = config.startHour;
-                // 1 ชั่วโมงในเกม = config.realSecondsPerHour วินาทีจริง
-                // ดังนั้น 1 นาทีในเกม = config.realSecondsPerHour / 60 วินาทีจริง
                 secondsPerMinute = Mathf.Max(0.01f, config.realSecondsPerHour / 60f);
             }
             else
             {
                 CurrentHour = 0;
-                secondsPerMinute = 1f; // ค่าเริ่มต้น 60 วิ ต่อชั่วโมง
+                secondsPerMinute = 1f;
             }
 
             CurrentMinute = 0;
@@ -84,6 +83,12 @@ namespace Pete.Systems
             OnTimeChanged?.Invoke(CurrentHour, CurrentMinute);
         }
 
+        public void ForceEndNight()
+        {
+            if (IsNightEnded) return;
+            EndNight();
+        }
+
         private void EndNight()
         {
             IsNightEnded = true;
@@ -93,6 +98,11 @@ namespace Pete.Systems
         public string GetTimeString()
         {
             return $"{CurrentHour:D2}:{CurrentMinute:D2}";
+        }
+
+        public string GetDisplayTime24H()
+        {
+            return GetTimeString();
         }
 
         public string GetDisplayHour12H()

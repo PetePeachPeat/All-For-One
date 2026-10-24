@@ -42,6 +42,7 @@ namespace SecurityCenter.MainMenu
 
         public string Description => _description;
         public string PrefKey => _prefKey;
+        public int CurrentIntValue => _currentIntValue;
 
         public void ConfigureChoice(int index, string label, string prefKey, string[] options, int defaultIndex, string desc)
         {
@@ -101,17 +102,20 @@ namespace SecurityCenter.MainMenu
             {
                 _currentIntValue = (_currentIntValue + dir + _options.Length) % _options.Length;
                 PlayerPrefs.SetInt(_prefKey, _currentIntValue);
+                PlayerPrefs.Save();
             }
             else if (_type == SettingsRowType.Slider)
             {
                 _currentIntValue = Mathf.Clamp(_currentIntValue + dir * _stepVal, _minVal, _maxVal);
                 PlayerPrefs.SetInt(_prefKey, _currentIntValue);
+                PlayerPrefs.Save();
             }
 
             if (MenuAudioManager.Instance != null)
                 MenuAudioManager.Instance.Play("ui_value_tick", 0.04f);
 
             RefreshValueDisplay();
+            OnRowChanged?.Invoke(rowIndex);
         }
 
         public void SetSelected(bool selected)
@@ -139,18 +143,19 @@ namespace SecurityCenter.MainMenu
             if (_type == SettingsRowType.Choice && _options != null && _options.Length > 0)
             {
                 string opt = _options[Mathf.Clamp(_currentIntValue, 0, _options.Length - 1)];
-                valueText.text = _isSelected ? $"◄  {opt}  ►" : opt;
+                valueText.text = _isSelected ? $"<  {opt}  >" : opt;
             }
             else if (_type == SettingsRowType.Slider)
             {
                 float ratio = _maxVal > _minVal ? (float)(_currentIntValue - _minVal) / (_maxVal - _minVal) : 0f;
                 int filled = Mathf.RoundToInt(ratio * 10f);
                 SliderSb.Clear();
-                if (_isSelected) SliderSb.Append("◄ ");
+                if (_isSelected) SliderSb.Append("< [");
+                else SliderSb.Append("[");
                 for (int i = 0; i < 10; i++)
-                    SliderSb.Append(i < filled ? '█' : '░');
-                SliderSb.Append(' ').Append(_currentIntValue);
-                if (_isSelected) SliderSb.Append(" ►");
+                    SliderSb.Append(i < filled ? '|' : '.');
+                SliderSb.Append("] ").Append(_currentIntValue);
+                if (_isSelected) SliderSb.Append(" >");
                 valueText.text = SliderSb.ToString();
             }
         }
@@ -177,23 +182,25 @@ namespace SecurityCenter.MainMenu
 
                 if (_type == SettingsRowType.Slider)
                 {
-                    // Left arrow region (< 0.72), slider bar region (0.72..0.90), right arrow region (> 0.90)
-                    if (nx < 0.73f)
+                    // Left arrow '<' region (0.52 .. 0.66) steps -1
+                    if (nx >= 0.52f && nx < 0.66f)
                     {
                         OnRowStep?.Invoke(rowIndex, -1);
                         return;
                     }
-                    if (nx > 0.91f)
+                    // Bar region (0.66 .. 0.88) sets slider directly
+                    if (nx >= 0.66f && nx <= 0.88f)
                     {
-                        OnRowStep?.Invoke(rowIndex, 1);
+                        SetSliderFromNormalized(Mathf.InverseLerp(0.66f, 0.88f, nx));
                         return;
                     }
-                    SetSliderFromNormalized(Mathf.InverseLerp(0.73f, 0.90f, nx));
+                    // Right arrow '>' region (> 0.88) or clicking label (< 0.52) steps +1
+                    OnRowStep?.Invoke(rowIndex, 1);
                     return;
                 }
 
-                // For Choice rows: clicking left half of the value column steps -1, right half steps +1
-                if (nx >= 0.55f && nx < 0.78f)
+                // For Choice rows: clicking left arrow region (0.52 .. 0.74) steps -1, otherwise steps +1
+                if (nx >= 0.52f && nx < 0.74f)
                 {
                     OnRowStep?.Invoke(rowIndex, -1);
                     return;
@@ -210,7 +217,7 @@ namespace SecurityCenter.MainMenu
             if (rt != null && RectTransformUtility.ScreenPointToLocalPointInRectangle(rt, eventData.position, eventData.pressEventCamera, out Vector2 localPt))
             {
                 float nx = (localPt.x - rt.rect.xMin) / Mathf.Max(1f, rt.rect.width);
-                SetSliderFromNormalized(Mathf.InverseLerp(0.73f, 0.90f, nx));
+                SetSliderFromNormalized(Mathf.InverseLerp(0.66f, 0.88f, nx));
             }
         }
 
@@ -232,6 +239,7 @@ namespace SecurityCenter.MainMenu
             {
                 _currentIntValue = stepped;
                 PlayerPrefs.SetInt(_prefKey, _currentIntValue);
+                PlayerPrefs.Save();
                 if (MenuAudioManager.Instance != null)
                     MenuAudioManager.Instance.Play("ui_value_tick", 0.04f);
                 RefreshValueDisplay();

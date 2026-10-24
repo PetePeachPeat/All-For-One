@@ -8,6 +8,10 @@ using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using Pete.Core;
+using Pete.Data;
+using Pete.Interaction;
+using Pete.Systems;
 using Pete.UI;
 using SecurityCenter.MainMenu;
 
@@ -21,7 +25,6 @@ namespace SecurityCenter.MainMenu.Editor
         [MenuItem("Tools/Security Center/Build All UIs In test.unity")]
         public static string BuildAllInTestScene()
         {
-            // First rebuild Main menu.unity so it stays in sync, and generate all procedural textures/fonts
             MainMenuAssetGenerator.GenerateAllAssets();
 
             Scene scene = SceneManager.GetActiveScene();
@@ -44,6 +47,7 @@ namespace SecurityCenter.MainMenu.Editor
             var sprPhoneDecline = AssetDatabase.LoadAssetAtPath<Sprite>(BaseDir + "/Textures/PhoneBtnDecline.png");
             var sprAlmondEye = AssetDatabase.LoadAssetAtPath<Sprite>(BaseDir + "/Textures/HorrorAlmondEye.png");
             var sprEyePupil = AssetDatabase.LoadAssetAtPath<Sprite>(BaseDir + "/Textures/HorrorEyePupil.png");
+            var sprVignette = AssetDatabase.LoadAssetAtPath<Sprite>(BaseDir + "/Textures/Vignette.png");
 
             // Ensure EventSystem exists
             if (Object.FindFirstObjectByType<EventSystem>() == null)
@@ -79,16 +83,28 @@ namespace SecurityCenter.MainMenu.Editor
             }
             BuildPhoneUIHierarchy(phoneUiGo, fontThai, fontType, fontTitle, sprScanline, sprPhoneAccept, sprPhoneDecline, sprAlmondEye, sprEyePupil);
 
-            // 3. Embed Main Menu Overlay Canvases in test.unity (SortingOrder 50, 60, 100)
-            BuildEmbeddedMainMenuInTestScene(fontTitle, fontType, fontThai, sprScanline);
+            // 2.5 Rebuild NoteUI inside GameUI_Canvas
+            var noteUiGo = FindChildTransform(gameCanvasGo.transform, "NoteUI")?.gameObject;
+            if (noteUiGo == null)
+            {
+                noteUiGo = CreateUI("NoteUI", gameCanvasGo.transform);
+                Stretch(noteUiGo.GetComponent<RectTransform>(), 0f);
+            }
+            BuildNoteUIHierarchy(noteUiGo, fontThai, fontType);
+
+            // 3. Remove any stuck Embedded Main Menu canvases from test.unity
+            RemoveEmbeddedMainMenuFromTestScene();
+
+            // 4. Build SanityUI & Wire All Systems/Interactables in test.unity
+            BuildSanityAndWireSystemsInTestScene(gameCanvasGo, fontThai, fontType, sprVignette);
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
-            return "Successfully built ComputerUI, PhoneUI, and MainMenu Overlay inside " + TestScenePath;
+            return "Successfully built ComputerUI, PhoneUI, SanityUI, and cleaned MainMenu from " + TestScenePath;
         }
 
         // =====================================================================
-        // 1. COMPUTER UI BUILDER (Exact match to Screenshot 1 & computer_desktop_ui.html)
+        // 1. COMPUTER UI BUILDER (No Test Buttons, Empty Slots Supported, No HTTP Badge)
         // =====================================================================
         private static void BuildComputerUIHierarchy(
             GameObject compUiGo,
@@ -104,30 +120,30 @@ namespace SecurityCenter.MainMenu.Editor
             var ctrl = compUiGo.GetComponent<ComputerUIController>();
             if (ctrl == null) ctrl = compUiGo.AddComponent<ComputerUIController>();
 
-            // DesktopRootPanel (Full-screen FNaF viewport container when inspecting Computer)
+            // DesktopRootPanel
             var rootPanel = CreateUI("DesktopRootPanel", compUiGo.transform);
             Stretch(rootPanel.GetComponent<RectTransform>(), 0f);
             var rootBg = rootPanel.AddComponent<Image>();
             rootBg.color = new Color(0.02f, 0.04f, 0.03f, 0.94f);
 
-            // Outer Viewport Frame (1640 x 960 centered)
+            // Outer Viewport Frame (1620 x 940 centered)
             var viewport = CreateUI("CRT_ViewportContainer", rootPanel.transform);
             SetCentered(viewport.GetComponent<RectTransform>(), 0f, 10f, 1620f, 940f);
             AddBorderedBox(viewport, new Color(0.03f, 0.05f, 0.04f, 1f), new Color(0.11f, 0.22f, 0.14f, 1f), 3f);
 
-            // Top-Left Red Recording Dot ● (Matches Screenshot 1)
+            // Top-Left Red Recording Dot ●
             var recDot = CreateUI("RecDot_TopLeft", viewport.transform);
             SetTopLeft(recDot.GetComponent<RectTransform>(), 24f, -20f, 26f, 26f);
             var recDotImg = recDot.AddComponent<Image>();
             recDotImg.color = new Color(0.90f, 0.12f, 0.12f, 0.92f);
             recDotImg.raycastTarget = false;
 
-            // Top-Right Night & Clock HUD (Subtle)
+            // Top-Right Night & Clock HUD
             var hudBar = CreateUI("HUD_ClockNight", viewport.transform);
-            SetTopRight(hudBar.GetComponent<RectTransform>(), -28f, -16f, 260f, 30f);
-            var timeTmp = CreateText(CreateUI("Time12H", hudBar.transform), fontType, "12 AM", 18f, new Color(0.29f, 0.87f, 0.50f, 0.7f), TextAlignmentOptions.MidlineRight);
+            SetTopRight(hudBar.GetComponent<RectTransform>(), -28f, -16f, 340f, 30f);
+            var timeTmp = CreateText(CreateUI("Time12H", hudBar.transform), fontType, "00:00 (12 AM)", 18f, new Color(0.29f, 0.87f, 0.50f, 0.85f), TextAlignmentOptions.MidlineRight);
             Stretch(timeTmp.GetComponent<RectTransform>(), 0f);
-            var nightTmp = CreateText(CreateUI("NightTxt", hudBar.transform), fontType, "NIGHT 1", 18f, new Color(0.29f, 0.87f, 0.50f, 0.7f), TextAlignmentOptions.MidlineLeft);
+            var nightTmp = CreateText(CreateUI("NightTxt", hudBar.transform), fontType, "NIGHT 1", 18f, new Color(0.29f, 0.87f, 0.50f, 0.85f), TextAlignmentOptions.MidlineLeft);
             Stretch(nightTmp.GetComponent<RectTransform>(), 0f);
 
             // Retro CRT Monitor Bezel (#cfeacc light retro green-beige frame: 1520 x 810)
@@ -136,7 +152,7 @@ namespace SecurityCenter.MainMenu.Editor
             SetCentered(monitorBezelRt, 0f, 24f, 1520f, 810f);
             AddBorderedBox(monitorBezel, new Color(0.81f, 0.92f, 0.80f, 1f), new Color(0.03f, 0.08f, 0.05f, 1f), 4f);
 
-            // Horizontal stripes across the beige bezel (retro striped look from Screenshot 1)
+            // Horizontal stripes across the beige bezel
             var bezelStripes = CreateUI("BezelScanlines", monitorBezel.transform);
             Stretch(bezelStripes.GetComponent<RectTransform>(), 4f);
             var bzScanImg = bezelStripes.AddComponent<Image>();
@@ -145,7 +161,7 @@ namespace SecurityCenter.MainMenu.Editor
             bzScanImg.color = new Color(0.05f, 0.16f, 0.08f, 0.55f);
             bzScanImg.raycastTarget = false;
 
-            // Inner Dithered Green Frame (1484 x 736 at top of bezel)
+            // Inner Dithered Green Frame (1484 x 732 at top of bezel)
             var innerDither = CreateUI("CRT_InnerDitherBezel", monitorBezel.transform);
             SetTopLeft(innerDither.GetComponent<RectTransform>(), 18f, -16f, 1484f, 732f);
             AddBorderedBox(innerDither, new Color(0.15f, 0.28f, 0.16f, 1f), new Color(0.03f, 0.08f, 0.05f, 1f), 3f);
@@ -155,7 +171,7 @@ namespace SecurityCenter.MainMenu.Editor
             Stretch(crtScreen.GetComponent<RectTransform>(), 16f);
             AddBorderedBox(crtScreen, new Color(0.008f, 0.043f, 0.024f, 1f), new Color(0.08f, 0.24f, 0.14f, 1f), 2f);
 
-            // Power button [O|] on bottom-right of monitor bezel (Matches Screenshot 1)
+            // Power button [O|] on bottom-right of monitor bezel
             var powerBtnGo = CreateUI("Btn_CRTPower", monitorBezel.transform);
             SetBottomRight(powerBtnGo.GetComponent<RectTransform>(), -26f, 10f, 54f, 42f);
             AddBorderedBox(powerBtnGo, new Color(0.81f, 0.92f, 0.80f, 1f), new Color(0.03f, 0.08f, 0.05f, 1f), 3f);
@@ -173,7 +189,7 @@ namespace SecurityCenter.MainMenu.Editor
             var desktopFoldersView = CreateUI("Screen1_DesktopFoldersView", crtScreen.transform);
             Stretch(desktopFoldersView.GetComponent<RectTransform>(), 12f);
 
-            // Top-Left Corner Bracket Glint ┏━━ (Matches Screenshot 1)
+            // Top-Left Corner Bracket Glint ┏━━
             var glintH = CreateUI("Glint_H", desktopFoldersView.transform);
             SetTopLeft(glintH.GetComponent<RectTransform>(), 22f, -20f, 136f, 10f);
             glintH.AddComponent<Image>().color = new Color(0.29f, 0.87f, 0.50f, 0.75f);
@@ -181,22 +197,15 @@ namespace SecurityCenter.MainMenu.Editor
             SetTopLeft(glintV.GetComponent<RectTransform>(), 22f, -20f, 10f, 58f);
             glintV.AddComponent<Image>().color = new Color(0.29f, 0.87f, 0.50f, 0.75f);
 
-            // Top-Right Replay Animation Button (Matches Screenshot 1: "► เล่นอนิเมชันเข้าหน้านี้ซ้ำ")
-            var replayDeskBtnGo = CreateTerminalButton(
-                desktopFoldersView.transform, "Btn_ReplayDesktopAnim", fontThai,
-                "► เล่นอนิเมชันเข้าหน้านี้ซ้ำ", 20f,
-                new Color(0.015f, 0.11f, 0.06f, 1f), new Color(0.08f, 0.50f, 0.24f, 1f), new Color(0.29f, 0.87f, 0.50f, 1f));
-            SetTopRight(replayDeskBtnGo.GetComponent<RectTransform>(), -22f, -18f, 360f, 40f);
-
-            // 3 Centered Folder Cards (GMAIL, WEBSITE, RULES)
+            // 3 Centered Folder Cards (GMAIL, WEBSITE, RULES) — Badges start hidden (0 items)
             var gmailBtn = BuildDesktopFolderCard(
                 desktopFoldersView.transform, "Btn_GMAIL", fontType, sprFolder,
-                "GMAIL", -390f, -10f, true, new Color(0.94f, 0.22f, 0.22f, 1f), Color.white, "3",
+                "GMAIL", -390f, -10f, false, new Color(0.94f, 0.22f, 0.22f, 1f), Color.white, "0",
                 out var gmailBadgeGo, out var gmailBadgeTxt);
 
             var webBtn = BuildDesktopFolderCard(
                 desktopFoldersView.transform, "Btn_WEBSITE", fontType, sprFolder,
-                "WEBSITE", 0f, -10f, true, new Color(0.96f, 0.62f, 0.04f, 1f), Color.black, "3",
+                "WEBSITE", 0f, -10f, false, new Color(0.96f, 0.62f, 0.04f, 1f), Color.black, "0",
                 out var webBadgeGo, out var webBadgeTxt);
 
             var rulesBtn = BuildDesktopFolderCard(
@@ -205,7 +214,7 @@ namespace SecurityCenter.MainMenu.Editor
                 out _, out _);
 
             // =================================================================
-            // SCREEN 2: GMAIL 3-COLUMN TERMINAL VIEW (Non-Overlapping!)
+            // SCREEN 2: GMAIL 3-COLUMN TERMINAL VIEW
             // =================================================================
             var gmailWindow = CreateUI("Screen2_GmailTerminalView", crtScreen.transform);
             Stretch(gmailWindow.GetComponent<RectTransform>(), 16f);
@@ -213,7 +222,7 @@ namespace SecurityCenter.MainMenu.Editor
             BuildTerminalHeaderBar(
                 gmailWindow.transform, fontThai,
                 "GMAIL // ข้อความเสนองานทั่วไป (ไม่มีลิงก์แนบ)",
-                out var gmailReplayBtn, out var gmailBackBtn);
+                out var gmailBackBtn);
 
             var gmailCardsList = new List<CRTMessageCardRefs>();
             for (int i = 0; i < 3; i++)
@@ -225,15 +234,15 @@ namespace SecurityCenter.MainMenu.Editor
             gmailWindow.SetActive(false);
 
             // =================================================================
-            // SCREEN 3A: WEBSITE 3-COLUMN MESSAGE SELECTOR VIEW (Non-Overlapping!)
+            // SCREEN 3A: WEBSITE 3-COLUMN MESSAGE SELECTOR VIEW
             // =================================================================
             var webListWindow = CreateUI("Screen3A_WebsiteListView", crtScreen.transform);
             Stretch(webListWindow.GetComponent<RectTransform>(), 16f);
 
             BuildTerminalHeaderBar(
                 webListWindow.transform, fontThai,
-                "WEBSITE // เลือกข้อความที่มีลิงก์เว็บไซต์แนบมา (3)",
-                out var webListReplayBtn, out var webListBackBtn);
+                "WEBSITE // ข้อความที่มีลิงก์เว็บไซต์แนบมา",
+                out var webListBackBtn);
 
             var webCardsList = new List<CRTMessageCardRefs>();
             for (int i = 0; i < 3; i++)
@@ -245,18 +254,18 @@ namespace SecurityCenter.MainMenu.Editor
             webListWindow.SetActive(false);
 
             // =================================================================
-            // SCREEN 3B: WEBSITE BROWSER PREVIEW SCREEN (When Link Is Opened!)
+            // SCREEN 3B: WEBSITE BROWSER PREVIEW SCREEN (No Security Badge!)
             // =================================================================
             var websiteWindow = BuildWebsiteBrowserScreen(
                 crtScreen.transform, fontThai,
                 out var webCloseBtn, out var webBackToListBtn,
-                out var webTabBtns, out var webSecBadgeBg, out var webSecBadgeTxt,
+                out var webTabBtns,
                 out var webUrlTxt, out var webNoteTxt, out var webTitleTxt, out var webDescTxt,
                 out var webFieldTxts, out var webApproveBtn, out var webDeclineBtn);
             websiteWindow.SetActive(false);
 
             // =================================================================
-            // SCREEN 4: RULES TERMINAL VIEW (Dedicated Non-Overlapping Screen!)
+            // SCREEN 4: RULES TERMINAL VIEW
             // =================================================================
             var rulesWindow = BuildRulesTerminalScreen(
                 crtScreen.transform, fontThai,
@@ -310,7 +319,7 @@ namespace SecurityCenter.MainMenu.Editor
             pwrLine.AddComponent<Image>().color = new Color(0.29f, 0.87f, 0.50f, 0.45f);
             powerOffGo.SetActive(false);
 
-            // Bottom-Center Exit Bar: "▼ ถอยออกจากหน้าจอคอม ▼" (Matches Screenshot 1)
+            // Bottom-Center Exit Bar
             var exitBtnGo = CreateTerminalButton(
                 viewport.transform, "Btn_ExitComputer", fontThai,
                 "▼  ถอยออกจากหน้าจอคอม  ▼", 22f,
@@ -323,7 +332,6 @@ namespace SecurityCenter.MainMenu.Editor
             SetField(ctrl, "timeDisplay12HText", timeTmp);
             SetField(ctrl, "nightDisplayText", nightTmp);
             SetField(ctrl, "exitComputerButton", exitBtnGo.GetComponent<Button>());
-            SetField(ctrl, "replayDesktopAnimButton", replayDeskBtnGo.GetComponent<Button>());
             SetField(ctrl, "crtPowerButton", powerBtn);
             SetField(ctrl, "crtPowerOffOverlay", powerOffGo);
             SetField(ctrl, "scanBeamRect", scanBeamRt);
@@ -340,12 +348,10 @@ namespace SecurityCenter.MainMenu.Editor
 
             SetField(ctrl, "gmailWindow", gmailWindow);
             SetField(ctrl, "gmailCloseButton", gmailBackBtn);
-            SetField(ctrl, "gmailReplayAnimButton", gmailReplayBtn);
             SetList(ctrl, "gmailCards", gmailCardsList);
 
             SetField(ctrl, "websiteListWindow", webListWindow);
             SetField(ctrl, "websiteListCloseButton", webListBackBtn);
-            SetField(ctrl, "websiteListReplayAnimButton", webListReplayBtn);
             SetList(ctrl, "websiteCards", webCardsList);
 
             SetField(ctrl, "websiteWindow", websiteWindow);
@@ -353,8 +359,6 @@ namespace SecurityCenter.MainMenu.Editor
             SetField(ctrl, "websiteBackToListButton", webBackToListBtn);
             SetField(ctrl, "websiteUrlText", webUrlTxt);
             SetField(ctrl, "websiteSenderNoteText", webNoteTxt);
-            SetField(ctrl, "websiteSecurityBadgeText", webSecBadgeTxt);
-            SetField(ctrl, "websiteSecurityBadgeBg", webSecBadgeBg);
             SetField(ctrl, "websiteTitleText", webTitleTxt);
             SetField(ctrl, "websiteDescText", webDescTxt);
             SetList(ctrl, "websiteFormFieldTexts", webFieldTxts);
@@ -430,7 +434,6 @@ namespace SecurityCenter.MainMenu.Editor
             Transform parent,
             TMP_FontAsset fontThai,
             string title,
-            out Button replayBtn,
             out Button backBtn)
         {
             var barGo = CreateUI("TopHeaderBar", parent);
@@ -449,16 +452,9 @@ namespace SecurityCenter.MainMenu.Editor
             line.AddComponent<Image>().color = new Color(0.09f, 0.40f, 0.20f, 1f);
 
             var titleGo = CreateUI("HeaderTitle", barGo.transform);
-            SetTopLeft(titleGo.GetComponent<RectTransform>(), 4f, -4f, 820f, 38f);
+            SetTopLeft(titleGo.GetComponent<RectTransform>(), 4f, -4f, 920f, 38f);
             var tTmp = CreateText(titleGo, fontThai, title, 22f, new Color(0.29f, 0.87f, 0.50f, 1f), TextAlignmentOptions.MidlineLeft);
             tTmp.fontStyle = FontStyles.Bold;
-
-            var replayGo = CreateTerminalButton(
-                barGo.transform, "Btn_ReplayAnim", fontThai,
-                "► เล่นอนิเมชันซ้ำ", 19f,
-                new Color(0.08f, 0.50f, 0.24f, 1f), new Color(0.29f, 0.87f, 0.50f, 1f), new Color(0.01f, 0.04f, 0.02f, 1f));
-            SetTopRight(replayGo.GetComponent<RectTransform>(), -230f, -4f, 210f, 36f);
-            replayBtn = replayGo.GetComponent<Button>();
 
             var backGo = CreateTerminalButton(
                 barGo.transform, "Btn_BackToFolders", fontThai,
@@ -487,18 +483,35 @@ namespace SecurityCenter.MainMenu.Editor
             rt.anchoredPosition = new Vector2(centerX, topY);
             rt.sizeDelta = new Vector2(w, h);
 
-            AddBorderedBox(cardGo, new Color(0.012f, 0.065f, 0.035f, 1f), new Color(0.18f, 0.65f, 0.34f, 1f), 2f, out var bgImg, out var borderImg);
+            AddBorderedBox(cardGo, new Color(0.012f, 0.065f, 0.035f, 1f), new Color(0.08f, 0.24f, 0.14f, 0.45f), 2f, out var bgImg, out var borderImg);
             refs.cardRoot = cardGo;
             refs.cardBgImage = bgImg;
             refs.cardBorderImage = borderImg;
 
-            // Header Row: ID Label + Category/Status Badge
-            var idGo = CreateUI("IdLabel", cardGo.transform);
+            // 1. Empty Slot View (Shown when slot is empty or after APPROVE / DECLINE)
+            var emptyRoot = CreateUI("EmptySlotRoot", cardGo.transform);
+            Stretch(emptyRoot.GetComponent<RectTransform>(), 0f);
+            var emptyTxtGo = CreateUI("EmptySlotLabel", emptyRoot.transform);
+            SetCentered(emptyTxtGo.GetComponent<RectTransform>(), 0f, 0f, w - 40f, 120f);
+            var emptyTmp = CreateText(
+                emptyTxtGo, fontThai,
+                "— ช่องว่าง —\n<size=80%>ไม่มีข้อความในช่องนี้</size>",
+                22f, new Color(0.29f, 0.87f, 0.50f, 0.28f), TextAlignmentOptions.Center);
+            emptyTmp.fontStyle = FontStyles.Bold;
+            refs.emptySlotRoot = emptyRoot;
+
+            // 2. Active Content Root (Shown when a random Email/Website occupies this slot)
+            var activeRoot = CreateUI("ActiveContentRoot", cardGo.transform);
+            Stretch(activeRoot.GetComponent<RectTransform>(), 0f);
+            refs.activeContentRoot = activeRoot;
+
+            // Header Row: ID Label + Category Badge
+            var idGo = CreateUI("IdLabel", activeRoot.transform);
             SetTopLeft(idGo.GetComponent<RectTransform>(), 16f, -14f, 220f, 32f);
             refs.idText = CreateText(idGo, fontThai, "ข้อความ 01", 21f, new Color(0.53f, 0.94f, 0.67f, 1f), TextAlignmentOptions.MidlineLeft);
             refs.idText.fontStyle = FontStyles.Bold;
 
-            var badgeGo = CreateUI("StatusBadge", cardGo.transform);
+            var badgeGo = CreateUI("StatusBadge", activeRoot.transform);
             SetTopRight(badgeGo.GetComponent<RectTransform>(), -16f, -14f, 165f, 32f);
             AddBorderedBox(badgeGo, new Color(0.08f, 0.35f, 0.18f, 1f), new Color(0.29f, 0.87f, 0.50f, 1f), 1.5f, out var bBg, out _);
             refs.badgeBgImage = bBg;
@@ -507,27 +520,27 @@ namespace SecurityCenter.MainMenu.Editor
             Stretch(refs.badgeText.GetComponent<RectTransform>(), 2f);
 
             // Sci-Fi Accent Rule Line
-            var ruleLine = CreateUI("RuleDivider", cardGo.transform);
+            var ruleLine = CreateUI("RuleDivider", activeRoot.transform);
             SetTopLeft(ruleLine.GetComponent<RectTransform>(), 16f, -54f, w - 32f, 3f);
             ruleLine.AddComponent<Image>().color = new Color(0.22f, 0.78f, 0.42f, 0.75f);
 
             // Sender & Meta Bracket Box
-            var metaBox = CreateUI("SenderMetaBox", cardGo.transform);
+            var metaBox = CreateUI("SenderMetaBox", activeRoot.transform);
             SetTopLeft(metaBox.GetComponent<RectTransform>(), 16f, -68f, w - 32f, 92f);
             AddBorderedBox(metaBox, new Color(0.01f, 0.04f, 0.02f, 0.9f), new Color(0.13f, 0.55f, 0.28f, 0.8f), 1.5f);
 
             var fromGo = CreateUI("FromText", metaBox.transform);
             SetTopLeft(fromGo.GetComponent<RectTransform>(), 12f, -10f, w - 56f, 34f);
-            refs.fromText = CreateText(fromGo, fontThai, "จาก: vip-job@fast-money.net", 19f, new Color(0.53f, 0.94f, 0.67f, 1f), TextAlignmentOptions.MidlineLeft);
+            refs.fromText = CreateText(fromGo, fontThai, "จาก: -", 19f, new Color(0.53f, 0.94f, 0.67f, 1f), TextAlignmentOptions.MidlineLeft);
             refs.fromText.fontStyle = FontStyles.Bold;
 
             var metaGo = CreateUI("MetaText", metaBox.transform);
             SetTopLeft(metaGo.GetComponent<RectTransform>(), 12f, -48f, w - 56f, 34f);
-            refs.metaText = CreateText(metaGo, fontThai, "เงื่อนไข: โอนค่ามัดจำ 1,500฿", 19f, new Color(0.29f, 0.87f, 0.50f, 1f), TextAlignmentOptions.MidlineLeft);
+            refs.metaText = CreateText(metaGo, fontThai, "ข้อมูล: -", 19f, new Color(0.29f, 0.87f, 0.50f, 1f), TextAlignmentOptions.MidlineLeft);
 
             // Body Text Box
             float bodyH = hasOpenWebButton ? 280f : 330f;
-            var bodyBox = CreateUI("BodyBox", cardGo.transform);
+            var bodyBox = CreateUI("BodyBox", activeRoot.transform);
             SetTopLeft(bodyBox.GetComponent<RectTransform>(), 16f, -172f, w - 32f, bodyH);
             AddBorderedBox(bodyBox, new Color(0.015f, 0.08f, 0.04f, 0.95f), new Color(0.29f, 0.87f, 0.50f, 0.85f), 2f);
 
@@ -539,7 +552,7 @@ namespace SecurityCenter.MainMenu.Editor
             if (hasOpenWebButton)
             {
                 var openWebGo = CreateTerminalButton(
-                    cardGo.transform, "Btn_OpenWebsite", fontThai,
+                    activeRoot.transform, "Btn_OpenWebsite", fontThai,
                     "► [ กดเปิดดูหน้าเว็บไซต์ ]", 20f,
                     new Color(0.03f, 0.20f, 0.10f, 1f), new Color(0.29f, 0.87f, 0.50f, 1f), new Color(0.53f, 0.94f, 0.67f, 1f));
                 SetBottomCenter(openWebGo.GetComponent<RectTransform>(), 0f, 70f, w - 32f, 44f);
@@ -549,18 +562,22 @@ namespace SecurityCenter.MainMenu.Editor
             // Bottom Action Row: [+] APPROVE & [X] DECLINE
             float btnW = (w - 44f) * 0.5f;
             var appGo = CreateTerminalButton(
-                cardGo.transform, "Btn_Approve", fontThai,
+                activeRoot.transform, "Btn_Approve", fontThai,
                 "[+] APPROVE", 21f,
                 new Color(0.13f, 0.77f, 0.37f, 1f), new Color(0.29f, 0.87f, 0.50f, 1f), new Color(0.01f, 0.04f, 0.02f, 1f));
             SetBottomLeft(appGo.GetComponent<RectTransform>(), 16f, 14f, btnW, 46f);
             refs.approveButton = appGo.GetComponent<Button>();
 
             var decGo = CreateTerminalButton(
-                cardGo.transform, "Btn_Decline", fontThai,
+                activeRoot.transform, "Btn_Decline", fontThai,
                 "[X] DECLINE", 21f,
                 new Color(0.01f, 0.04f, 0.02f, 1f), new Color(0.29f, 0.87f, 0.50f, 1f), new Color(0.29f, 0.87f, 0.50f, 1f));
             SetBottomRight(decGo.GetComponent<RectTransform>(), -16f, 14f, btnW, 46f);
             refs.declineButton = decGo.GetComponent<Button>();
+
+            // Start in Empty Slot state
+            activeRoot.SetActive(false);
+            emptyRoot.SetActive(true);
 
             return refs;
         }
@@ -571,8 +588,6 @@ namespace SecurityCenter.MainMenu.Editor
             out Button closeToDesktopBtn,
             out Button backToListBtn,
             out List<Button> tabButtons,
-            out Image secBadgeBg,
-            out TextMeshProUGUI secBadgeTxt,
             out TextMeshProUGUI urlTxt,
             out TextMeshProUGUI noteTxt,
             out TextMeshProUGUI webTitleTxt,
@@ -611,7 +626,7 @@ namespace SecurityCenter.MainMenu.Editor
             SetTopRight(closeDeskGo.GetComponent<RectTransform>(), -4f, -4f, 216f, 36f);
             closeToDesktopBtn = closeDeskGo.GetComponent<Button>();
 
-            // Row 1: 3 Website Item Tabs + Security Badge
+            // Row 1: 3 Website Item Tabs ONLY (No HTTP/HTTPS Security Badge at top-right!)
             tabButtons = new List<Button>();
             for (int i = 0; i < 3; i++)
             {
@@ -625,13 +640,6 @@ namespace SecurityCenter.MainMenu.Editor
                 tabButtons.Add(tabGo.GetComponent<Button>());
             }
 
-            var secGo = CreateUI("SecurityBadge", win.transform);
-            SetTopRight(secGo.GetComponent<RectTransform>(), 0f, -58f, 250f, 38f);
-            AddBorderedBox(secGo, new Color(0.28f, 0.14f, 0.04f, 1f), new Color(0.29f, 0.87f, 0.50f, 1f), 1.5f, out secBadgeBg, out _);
-            secBadgeTxt = CreateText(CreateUI("Txt", secGo.transform), fontThai, "[!] HTTP ไม่ปลอดภัย", 19f, new Color(0.98f, 0.80f, 0.20f, 1f), TextAlignmentOptions.Center);
-            secBadgeTxt.fontStyle = FontStyles.Bold;
-            Stretch(secBadgeTxt.GetComponent<RectTransform>(), 2f);
-
             // Row 2: URL Bar
             var urlBar = CreateUI("URL_Bar", win.transform);
             SetTopLeft(urlBar.GetComponent<RectTransform>(), 0f, -106f, 1420f, 44f);
@@ -644,12 +652,12 @@ namespace SecurityCenter.MainMenu.Editor
 
             var urlValGo = CreateUI("UrlValue", urlBar.transform);
             SetTopLeft(urlValGo.GetComponent<RectTransform>(), 220f, -4f, 680f, 36f);
-            urlTxt = CreateText(urlValGo, fontThai, "http://mea-free-refund.net/claim-pin", 20f, Color.white, TextAlignmentOptions.MidlineLeft);
+            urlTxt = CreateText(urlValGo, fontThai, "https://...", 20f, Color.white, TextAlignmentOptions.MidlineLeft);
             urlTxt.fontStyle = FontStyles.Bold;
 
             var noteGo = CreateUI("SenderNote", urlBar.transform);
             SetTopRight(noteGo.GetComponent<RectTransform>(), -14f, -4f, 460f, 36f);
-            noteTxt = CreateText(noteGo, fontThai, "งานรับเงินคืนค่าไฟด่วน (แนบลิงก์)", 18f, new Color(0.53f, 0.94f, 0.67f, 1f), TextAlignmentOptions.MidlineRight);
+            noteTxt = CreateText(noteGo, fontThai, "", 18f, new Color(0.53f, 0.94f, 0.67f, 1f), TextAlignmentOptions.MidlineRight);
 
             // Row 3: Webpage Preview Frame
             var previewBox = CreateUI("WebpagePreviewFrame", win.transform);
@@ -661,12 +669,12 @@ namespace SecurityCenter.MainMenu.Editor
             banner.AddComponent<Image>().color = new Color(0.29f, 0.87f, 0.50f, 1f);
             var wtGo = CreateUI("WebTitleText", banner.transform);
             Stretch(wtGo.GetComponent<RectTransform>(), 12f);
-            webTitleTxt = CreateText(wtGo, fontThai, "[!] ระบบรับเงินคืนค่าไฟด่วน (MEA REFUND)", 22f, new Color(0.01f, 0.04f, 0.02f, 1f), TextAlignmentOptions.MidlineLeft);
+            webTitleTxt = CreateText(wtGo, fontThai, "", 22f, new Color(0.01f, 0.04f, 0.02f, 1f), TextAlignmentOptions.MidlineLeft);
             webTitleTxt.fontStyle = FontStyles.Bold;
 
             var wdGo = CreateUI("WebDescText", previewBox.transform);
             SetTopLeft(wdGo.GetComponent<RectTransform>(), 22f, -68f, 1370f, 44f);
-            webDescTxt = CreateText(wdGo, fontThai, "กรุณากรอกข้อมูลเพื่อรับเงินคืน 4,500 บาท เข้าบัญชีทันที:", 21f, new Color(0.86f, 0.96f, 0.82f, 1f), TextAlignmentOptions.MidlineLeft);
+            webDescTxt = CreateText(wdGo, fontThai, "", 21f, new Color(0.86f, 0.96f, 0.82f, 1f), TextAlignmentOptions.MidlineLeft);
 
             fieldTexts = new List<TextMeshProUGUI>();
             for (int i = 0; i < 3; i++)
@@ -752,8 +760,8 @@ namespace SecurityCenter.MainMenu.Editor
             var b1Body = CreateUI("Body", box1.transform);
             SetTopLeft(b1Body.GetComponent<RectTransform>(), 24f, -72f, 1340f, 130f);
             rulesBodyTmp = CreateText(b1Body, fontThai,
-                "• หากบังคับโอนเงินค่าเปิดรหัส VIP ก่อน, ขอสมุดบัญชี/รหัส ATM (บัญชีม้า), หรือแนบไฟล์นามสกุล <color=#4ade80>.exe</color> ให้กด <color=#86efac>✕ DECLINE</color> ทันที\n" +
-                "• หากเป็นเอกสารสัญญาจ้างงานบริษัทจริงที่ไม่มีการเรียกเก็บเงินล่วงหน้า ให้กด <color=#4ade80>✓ APPROVE</color>",
+                "• หากบังคับโอนเงินค่าเปิดรหัส VIP ก่อน, ขอสมุดบัญชี/รหัส ATM (บัญชีม้า), หรือแนบไฟล์นามสกุล <color=#4ade80>.exe</color> ให้กด <color=#86efac>[X] DECLINE</color> ทันที\n" +
+                "• หากเป็นเอกสารสัญญาจ้างงานบริษัทจริงที่ไม่มีการเรียกเก็บเงินล่วงหน้า ให้กด <color=#4ade80>[+] APPROVE</color>",
                 22f, new Color(0.86f, 0.96f, 0.82f, 1f), TextAlignmentOptions.TopLeft);
 
             // Rule Box 2
@@ -771,7 +779,7 @@ namespace SecurityCenter.MainMenu.Editor
             SetTopLeft(b2Body.GetComponent<RectTransform>(), 24f, -72f, 1340f, 130f);
             CreateText(b2Body, fontThai,
                 "• ตรวจช่อง <color=#4ade80>URL ลิงก์แนบ</color> ต้องเป็น <color=#86efac>HTTPS</color> ที่ตรงกับชื่อหน่วยงานจริง และไม่หลอกให้กรอกรหัส PIN ธนาคารในหน้าเว็บ\n" +
-                "• เว็บปลอมที่เป็น HTTP หรือขอรหัสผ่าน Mobile Banking / PIN ATM 6 หลัก ให้กด <color=#86efac>✕ DECLINE</color> ทันที",
+                "• เว็บปลอมที่เป็น HTTP หรือขอรหัสผ่าน Mobile Banking / PIN ATM 6 หลัก ให้กด <color=#86efac>[X] DECLINE</color> ทันที",
                 22f, new Color(0.86f, 0.96f, 0.82f, 1f), TextAlignmentOptions.TopLeft);
 
             var ackGo = CreateTerminalButton(
@@ -785,7 +793,7 @@ namespace SecurityCenter.MainMenu.Editor
         }
 
         // =====================================================================
-        // 2. PHONE UI BUILDER (Exact match to Screenshots 2, 3, and 4)
+        // 2. PHONE UI BUILDER (No Test Buttons, Black Standby Screen With Clock)
         // =====================================================================
         private static void BuildPhoneUIHierarchy(
             GameObject phoneUiGo,
@@ -813,12 +821,12 @@ namespace SecurityCenter.MainMenu.Editor
             SetCentered(viewport.GetComponent<RectTransform>(), 0f, 10f, 1620f, 940f);
             AddBorderedBox(viewport, new Color(0.02f, 0.04f, 0.06f, 1f), new Color(0.12f, 0.24f, 0.32f, 1f), 3f);
 
-            // Backdrop 1: Normal Dark Blue/Cyan Scanline Backdrop (Screenshot 2)
+            // Backdrop 1: Normal Dark Backdrop
             var normalBackdrop = CreateUI("NormalBackdropLayer", viewport.transform);
             Stretch(normalBackdrop.GetComponent<RectTransform>(), 3f);
             normalBackdrop.AddComponent<Image>().color = new Color(0.02f, 0.05f, 0.08f, 1f);
 
-            // Backdrop 2: Horror Red/Black Backdrop (Screenshots 3 & 4)
+            // Backdrop 2: Horror Red/Black Backdrop
             var horrorBackdrop = CreateUI("HorrorRedBackdropLayer", viewport.transform);
             Stretch(horrorBackdrop.GetComponent<RectTransform>(), 3f);
             horrorBackdrop.AddComponent<Image>().color = new Color(0.16f, 0.015f, 0.015f, 1f);
@@ -827,45 +835,10 @@ namespace SecurityCenter.MainMenu.Editor
             var pupilList = new List<RectTransform>();
             var screamTextList = new List<RectTransform>();
 
-            // Top-Left Red Recording Dot ● (Matches Screenshots 2, 3, 4)
+            // Top-Left Red Recording Dot ●
             var recDot = CreateUI("RecDot_TopLeft", viewport.transform);
             SetTopLeft(recDot.GetComponent<RectTransform>(), 32f, -26f, 38f, 38f);
             recDot.AddComponent<Image>().color = new Color(0.86f, 0.12f, 0.12f, 0.92f);
-
-            // Top-Right Mode Switcher Bar (Matches Screenshots 2, 3, 4)
-            var topBar = CreateUI("TopModeSwitcherBar", viewport.transform);
-            SetTopRight(topBar.GetComponent<RectTransform>(), -24f, -18f, 1060f, 58f);
-            AddBorderedBox(topBar, new Color(0.02f, 0.04f, 0.06f, 0.95f), new Color(0.14f, 0.26f, 0.34f, 1f), 2f);
-
-            var btnIncomingGo = CreateTerminalButton(
-                topBar.transform, "Btn_ModeIncoming", fontThai,
-                "► สายเรียกเข้า (Ref)", 19f,
-                new Color(0.04f, 0.16f, 0.22f, 1f), new Color(0.22f, 0.68f, 0.82f, 1f), new Color(0.55f, 0.94f, 0.98f, 1f));
-            SetTopLeft(btnIncomingGo.GetComponent<RectTransform>(), 10f, -8f, 235f, 42f);
-
-            var btnEyeballGo = CreateTerminalButton(
-                topBar.transform, "Btn_ModeGhostEyeball", fontThai,
-                "● ผีกระซิบ (ลูกตา)", 19f,
-                new Color(0.18f, 0.03f, 0.03f, 1f), new Color(0.85f, 0.18f, 0.18f, 1f), new Color(0.98f, 0.45f, 0.45f, 1f));
-            SetTopLeft(btnEyeballGo.GetComponent<RectTransform>(), 255f, -8f, 225f, 42f);
-
-            var btnScreamGo = CreateTerminalButton(
-                topBar.transform, "Btn_ModeGhostScream", fontThai,
-                "[!] ผีกรี๊ด! (DIE/HELP)", 19f,
-                new Color(0.22f, 0.03f, 0.03f, 1f), new Color(0.95f, 0.22f, 0.22f, 1f), new Color(1f, 0.55f, 0.55f, 1f));
-            SetTopLeft(btnScreamGo.GetComponent<RectTransform>(), 490f, -8f, 245f, 42f);
-
-            var btnFakeGo = CreateTerminalButton(
-                topBar.transform, "Btn_ModeFakeCase", fontThai,
-                "เคสปลอม", 19f,
-                new Color(0.28f, 0.05f, 0.05f, 1f), new Color(0.92f, 0.22f, 0.22f, 1f), new Color(0.98f, 0.45f, 0.45f, 1f));
-            SetTopLeft(btnFakeGo.GetComponent<RectTransform>(), 750f, -8f, 140f, 42f);
-
-            var btnRealGo = CreateTerminalButton(
-                topBar.transform, "Btn_ModeRealCase", fontThai,
-                "เคสจริง", 19f,
-                new Color(0.05f, 0.10f, 0.14f, 1f), new Color(0.24f, 0.34f, 0.42f, 1f), new Color(0.82f, 0.88f, 0.92f, 1f));
-            SetTopLeft(btnRealGo.GetComponent<RectTransform>(), 900f, -8f, 145f, 42f);
 
             // =================================================================
             // SMARTPHONE CENTER FRAME (540 x 760 centered)
@@ -891,7 +864,7 @@ namespace SecurityCenter.MainMenu.Editor
             // Inner Smartphone Screen (496 x 676)
             var phoneScreen = CreateUI("SmartphoneScreen", phoneFrame.transform);
             SetCentered(phoneScreen.GetComponent<RectTransform>(), 0f, -2f, 496f, 676f);
-            AddBorderedBox(phoneScreen, new Color(0.02f, 0.05f, 0.07f, 1f), new Color(0.12f, 0.22f, 0.28f, 1f), 2f, out var screenBgImg, out _);
+            AddBorderedBox(phoneScreen, new Color(0.008f, 0.012f, 0.018f, 1f), new Color(0.12f, 0.22f, 0.28f, 1f), 2f, out var screenBgImg, out _);
 
             // Top Carrier Status Bar ("SEC-NET                  5G |||")
             var carrierGo = CreateUI("CarrierHeader", phoneScreen.transform);
@@ -904,7 +877,32 @@ namespace SecurityCenter.MainMenu.Editor
             carrierRule.AddComponent<Image>().color = new Color(0.16f, 0.28f, 0.34f, 0.6f);
 
             // =================================================================
-            // MODE A: RINGING PANEL (Screenshot 2: INCOMING CALL)
+            // MODE 0: IDLE BLACK STANDBY SCREEN WITH CLOCK (When no call is active!)
+            // =================================================================
+            var idleStandbyPanel = CreateUI("IdleStandbyPanel", phoneScreen.transform);
+            Stretch(idleStandbyPanel.GetComponent<RectTransform>(), 2f);
+            var idleBgImg = idleStandbyPanel.AddComponent<Image>();
+            idleBgImg.color = new Color(0.005f, 0.008f, 0.012f, 0.96f);
+            idleBgImg.raycastTarget = false;
+
+            var idleClockGo = CreateUI("IdleClockText", idleStandbyPanel.transform);
+            SetCentered(idleClockGo.GetComponent<RectTransform>(), 0f, 55f, 440f, 90f);
+            var idleClockTmp = CreateText(idleClockGo, fontType, "00:00", 68f, new Color(0.86f, 0.94f, 0.98f, 0.92f), TextAlignmentOptions.Center);
+            idleClockTmp.fontStyle = FontStyles.Bold;
+            idleClockTmp.characterSpacing = 10f;
+
+            var idleSubClockGo = CreateUI("IdleSubClockText", idleStandbyPanel.transform);
+            SetCentered(idleSubClockGo.GetComponent<RectTransform>(), 0f, -15f, 420f, 40f);
+            var idleSubClockTmp = CreateText(idleSubClockGo, fontType, "12 AM  •  NIGHT 1", 22f, new Color(0.42f, 0.78f, 0.88f, 0.80f), TextAlignmentOptions.Center);
+            idleSubClockTmp.fontStyle = FontStyles.Bold;
+            idleSubClockTmp.characterSpacing = 6f;
+
+            var idleHintGo = CreateUI("IdleStandbyHint", idleStandbyPanel.transform);
+            SetBottomCenter(idleHintGo.GetComponent<RectTransform>(), 0f, 56f, 420f, 44f);
+            CreateText(idleHintGo, fontThai, "— ไม่มีสายเรียกเข้า —", 20f, new Color(0.45f, 0.58f, 0.65f, 0.55f), TextAlignmentOptions.Center);
+
+            // =================================================================
+            // MODE A: RINGING PANEL (INCOMING CALL)
             // =================================================================
             var ringingPanel = CreateUI("RingingPanel", phoneScreen.transform);
             Stretch(ringingPanel.GetComponent<RectTransform>(), 0f);
@@ -917,15 +915,15 @@ namespace SecurityCenter.MainMenu.Editor
 
             var numGo = CreateUI("CallerNumber", ringingPanel.transform);
             SetCentered(numGo.GetComponent<RectTransform>(), 0f, 52f, 440f, 40f);
-            var numTmp = CreateText(numGo, fontType, "098-712-XXXX", 24f, new Color(0.42f, 0.90f, 0.96f, 1f), TextAlignmentOptions.Center);
+            var numTmp = CreateText(numGo, fontType, "02-910-8800", 24f, new Color(0.42f, 0.90f, 0.96f, 1f), TextAlignmentOptions.Center);
             numTmp.fontStyle = FontStyles.Bold;
             numTmp.characterSpacing = 6f;
 
             var nameGo = CreateUI("CallerName", ringingPanel.transform);
             SetCentered(nameGo.GetComponent<RectTransform>(), 0f, 12f, 440f, 40f);
-            var nameTmp = CreateText(nameGo, fontThai, "\"สภ.เมือง (ฝ่ายสืบสวน)\"", 22f, new Color(0.75f, 0.82f, 0.86f, 1f), TextAlignmentOptions.Center);
+            var nameTmp = CreateText(nameGo, fontThai, "\"สายเรียกเข้า\"", 22f, new Color(0.75f, 0.82f, 0.86f, 1f), TextAlignmentOptions.Center);
 
-            // Round Green Answer Button & Round Red Decline Button (Screenshot 2)
+            // Round Green Answer Button & Round Red Decline Button
             var ansBtnGo = CreateUI("Btn_AnswerGreen", ringingPanel.transform);
             SetCentered(ansBtnGo.GetComponent<RectTransform>(), -102f, -125f, 108f, 108f);
             var ansImg = ansBtnGo.AddComponent<Image>();
@@ -941,9 +939,11 @@ namespace SecurityCenter.MainMenu.Editor
             var hangBtn = hangBtnGo.AddComponent<Button>();
 
             var clockBotGo = CreateUI("ClockBottom", ringingPanel.transform);
-            SetBottomCenter(clockBotGo.GetComponent<RectTransform>(), 0f, 38f, 240f, 34f);
-            var clockBotTmp = CreateText(clockBotGo, fontType, "3:17 AM", 22f, new Color(0.78f, 0.86f, 0.90f, 0.9f), TextAlignmentOptions.Center);
-            clockBotTmp.characterSpacing = 8f;
+            SetBottomCenter(clockBotGo.GetComponent<RectTransform>(), 0f, 38f, 300f, 34f);
+            var clockBotTmp = CreateText(clockBotGo, fontType, "00:00 (12 AM)", 22f, new Color(0.78f, 0.86f, 0.90f, 0.9f), TextAlignmentOptions.Center);
+            clockBotTmp.characterSpacing = 6f;
+
+            ringingPanel.SetActive(false);
 
             // =================================================================
             // MODE B: IN-CALL CONVERSATION PANEL
@@ -958,12 +958,12 @@ namespace SecurityCenter.MainMenu.Editor
 
             var icNumGo = CreateUI("InCallNumber", inCallPanel.transform);
             SetTopCenter(icNumGo.GetComponent<RectTransform>(), 0f, -112f, 440f, 34f);
-            var icNumTmp = CreateText(icNumGo, fontType, "098-712-XXXX", 22f, new Color(0.42f, 0.90f, 0.96f, 1f), TextAlignmentOptions.Center);
+            var icNumTmp = CreateText(icNumGo, fontType, "02-910-8800", 22f, new Color(0.42f, 0.90f, 0.96f, 1f), TextAlignmentOptions.Center);
             icNumTmp.fontStyle = FontStyles.Bold;
 
             var icNameGo = CreateUI("InCallName", inCallPanel.transform);
             SetTopCenter(icNameGo.GetComponent<RectTransform>(), 0f, -146f, 440f, 34f);
-            var icNameTmp = CreateText(icNameGo, fontThai, "\"สภ.เมือง (ฝ่ายสืบสวน)\"", 20f, new Color(0.78f, 0.84f, 0.88f, 1f), TextAlignmentOptions.Center);
+            var icNameTmp = CreateText(icNameGo, fontThai, "\"สายสนทนา\"", 20f, new Color(0.78f, 0.84f, 0.88f, 1f), TextAlignmentOptions.Center);
 
             var dlgBox = CreateUI("DialogueBox", inCallPanel.transform);
             SetCentered(dlgBox.GetComponent<RectTransform>(), 0f, 12f, 444f, 220f);
@@ -991,7 +991,7 @@ namespace SecurityCenter.MainMenu.Editor
 
             var decOfferGo = CreateTerminalButton(
                 decisionPanel.transform, "Btn_DeclineOffer", fontThai,
-                "[X] DECLINE (วางสายมิจฉาชีพ)", 20f,
+                "[X] DECLINE (วางสาย)", 20f,
                 new Color(0.85f, 0.18f, 0.18f, 1f), new Color(0.98f, 0.45f, 0.45f, 1f), Color.white);
             SetBottomCenter(decOfferGo.GetComponent<RectTransform>(), 0f, 0f, 436f, 52f);
             var decOfferBtn = decOfferGo.GetComponent<Button>();
@@ -999,12 +999,11 @@ namespace SecurityCenter.MainMenu.Editor
             inCallPanel.SetActive(false);
 
             // =================================================================
-            // MODE C: GHOST WHISPER / ROVING EYEBALLS (Screenshot 3!)
+            // MODE C: GHOST WHISPER / ROVING EYEBALLS (No Replay Jumpscare Button!)
             // =================================================================
             var ghostEyeballRoot = CreateUI("GhostEyeballRoot", viewport.transform);
             Stretch(ghostEyeballRoot.GetComponent<RectTransform>(), 0f);
 
-            // 8 Outer Almond Eyes floating in dark red background outside the phone (Screenshot 3)
             Vector2[] outerEyeCoords =
             {
                 new Vector2(-540f, 210f), new Vector2(-410f, 65f), new Vector2(-560f, -65f), new Vector2(-490f, -255f),
@@ -1016,21 +1015,18 @@ namespace SecurityCenter.MainMenu.Editor
                 new Vector2(245f, 112f), new Vector2(155f, 74f), new Vector2(260f, 115f), new Vector2(225f, 98f)
             };
 
-            // Inside Phone Screen: Black Sphere + Giant Central Eye + 5 Inner Eyes + Warning Box
             var phoneEyeOverlay = CreateUI("PhoneScreen_EyeballContainer", ghostEyeballRoot.transform);
             SetCentered(phoneEyeOverlay.GetComponent<RectTransform>(), 0f, -8f, 492f, 672f);
 
             var blackSphere = CreateUI("BlackVoidCircle", phoneEyeOverlay.transform);
             SetCentered(blackSphere.GetComponent<RectTransform>(), 0f, 36f, 430f, 430f);
             var sphereImg = blackSphere.AddComponent<Image>();
-            sphereImg.sprite = sprPhoneAccept; // circular mask shape tinted pure black
+            sphereImg.sprite = sprPhoneAccept;
             sphereImg.color = new Color(0.01f, 0.01f, 0.01f, 0.98f);
 
-            // Giant Central Eye (pupilList[0] is the main central pupil!)
             var mainPupil = CreateHorrorAlmondEye(phoneEyeOverlay.transform, "GiantCenterEye", sprAlmondEye, sprEyePupil, Vector2.zero + new Vector2(0f, 22f), new Vector2(350f, 165f), 96f);
             pupilList.Add(mainPupil);
 
-            // 5 Smaller Inner Eyes around the black sphere inside the phone screen (Screenshot 3)
             Vector2[] innerEyePos =
             {
                 new Vector2(-150f, 195f), new Vector2(4f, 182f), new Vector2(155f, 192f),
@@ -1042,43 +1038,34 @@ namespace SecurityCenter.MainMenu.Editor
                 pupilList.Add(p);
             }
 
-            // Outer 8 Eyes
             for (int i = 0; i < outerEyeCoords.Length; i++)
             {
                 var p = CreateHorrorAlmondEye(ghostEyeballRoot.transform, $"OuterEye_{i:00}", sprAlmondEye, sprEyePupil, outerEyeCoords[i], outerEyeSizes[i], outerEyeSizes[i].y * 0.56f);
                 pupilList.Add(p);
             }
 
-            // Bottom Warning Box inside Phone Screen (Screenshot 3: "[!] [สายผีตัดไปแล้ว!] รีบกด A/D หันไปคลิกศาลเจ้าใน 7 วินาที!")
             var eyeWarnBox = CreateUI("GhostWarningBox", phoneEyeOverlay.transform);
-            SetBottomCenter(eyeWarnBox.GetComponent<RectTransform>(), 0f, 24f, 456f, 236f);
+            SetBottomCenter(eyeWarnBox.GetComponent<RectTransform>(), 0f, 24f, 456f, 210f);
             AddBorderedBox(eyeWarnBox, new Color(0.02f, 0.01f, 0.01f, 0.96f), new Color(0.68f, 0.12f, 0.12f, 1f), 2f);
 
             var warnTxtGo = CreateUI("WarningText", eyeWarnBox.transform);
-            SetTopCenter(warnTxtGo.GetComponent<RectTransform>(), 0f, -14f, 428f, 118f);
-            var warnTmp = CreateText(warnTxtGo, fontThai, "[!] [สายผีตัดไปแล้ว!] รีบกด\nA/D หันไปคลิกศาลเจ้าใน 7\nวินาที!", 23f, new Color(0.98f, 0.72f, 0.72f, 1f), TextAlignmentOptions.Center);
+            SetTopCenter(warnTxtGo.GetComponent<RectTransform>(), 0f, -14f, 428f, 110f);
+            var warnTmp = CreateText(warnTxtGo, fontThai, "[!] [สายผีพูดขู่!] รีบกด\nA/D หันไปคลิกศาลเจ้าใน 7\nวินาที!", 23f, new Color(0.98f, 0.72f, 0.72f, 1f), TextAlignmentOptions.Center);
             warnTmp.fontStyle = FontStyles.Bold;
 
             var warnLine = CreateUI("Divider", eyeWarnBox.transform);
-            SetCentered(warnLine.GetComponent<RectTransform>(), 0f, -16f, 420f, 2f);
+            SetCentered(warnLine.GetComponent<RectTransform>(), 0f, -22f, 420f, 2f);
             warnLine.AddComponent<Image>().color = new Color(0.45f, 0.08f, 0.08f, 1f);
 
             var cdEyeGo = CreateUI("CountdownLabel", eyeWarnBox.transform);
-            SetBottomLeft(cdEyeGo.GetComponent<RectTransform>(), 24f, 18f, 190f, 68f);
-            var cdEyeTmp = CreateText(cdEyeGo, fontThai, "[!] สายผีตัด\nใน: 7.0s", 21f, new Color(0.95f, 0.32f, 0.32f, 1f), TextAlignmentOptions.Center);
+            SetBottomCenter(cdEyeGo.GetComponent<RectTransform>(), 0f, 14f, 420f, 52f);
+            var cdEyeTmp = CreateText(cdEyeGo, fontThai, "[!] สายผีตัด — รีบไปศาลเจ้าใน: 7.0s", 21f, new Color(0.95f, 0.32f, 0.32f, 1f), TextAlignmentOptions.Center);
             cdEyeTmp.fontStyle = FontStyles.Bold;
-
-            var replayEyeBtnGo = CreateTerminalButton(
-                eyeWarnBox.transform, "Btn_ReplayEyeballJumpscare", fontThai,
-                "เล่นซ้ำ\nJumpscare", 20f,
-                new Color(0.58f, 0.10f, 0.10f, 1f), new Color(0.92f, 0.25f, 0.25f, 1f), Color.white);
-            SetBottomRight(replayEyeBtnGo.GetComponent<RectTransform>(), -18f, 16f, 206f, 74f);
-            var replayEyeBtn = replayEyeBtnGo.GetComponent<Button>();
 
             ghostEyeballRoot.SetActive(false);
 
             // =================================================================
-            // MODE D: GHOST SCREAM TEXT FLOOD (Screenshot 4: DIE / HAHAHA! / HELP ME / ??? / EVIL!)
+            // MODE D: GHOST SCREAM TEXT FLOOD (No Replay Jumpscare Button!)
             // =================================================================
             var ghostScreamRoot = CreateUI("GhostScreamRoot", viewport.transform);
             Stretch(ghostScreamRoot.GetComponent<RectTransform>(), 0f);
@@ -1086,7 +1073,6 @@ namespace SecurityCenter.MainMenu.Editor
             string[] screamPhrases = { "DIE", "HAHAHA!", "HELP ME", "???", "EVIL!", "DIE DIE", "HELP!", "??????" };
             var rng = new System.Random(666);
 
-            // 26 Background Scream Words flooding across the outer screen
             for (int i = 0; i < 26; i++)
             {
                 string word = screamPhrases[i % screamPhrases.Length];
@@ -1106,7 +1092,6 @@ namespace SecurityCenter.MainMenu.Editor
                 screamTextList.Add(wrt);
             }
 
-            // 22 Intense Foreground Scream Words inside the Phone Screen
             var phoneScreamContainer = CreateUI("PhoneScreen_ScreamContainer", ghostScreamRoot.transform);
             SetCentered(phoneScreamContainer.GetComponent<RectTransform>(), 0f, -8f, 488f, 668f);
             phoneScreamContainer.AddComponent<RectMask2D>();
@@ -1130,7 +1115,6 @@ namespace SecurityCenter.MainMenu.Editor
                 screamTextList.Add(wrt);
             }
 
-            // Scream Banner & Replay Jumpscare Button inside Phone Screen (Screenshot 4)
             var screamBanner = CreateUI("ScreamAlertBanner", phoneScreamContainer.transform);
             SetCentered(screamBanner.GetComponent<RectTransform>(), 0f, -75f, 420f, 48f);
             AddBorderedBox(screamBanner, new Color(0.04f, 0.01f, 0.01f, 0.88f), new Color(0.95f, 0.20f, 0.20f, 1f), 2f);
@@ -1139,16 +1123,9 @@ namespace SecurityCenter.MainMenu.Editor
             Stretch(sbTmp.GetComponent<RectTransform>(), 0f);
 
             var cdScreamGo = CreateUI("ScreamCountdown", phoneScreamContainer.transform);
-            SetBottomLeft(cdScreamGo.GetComponent<RectTransform>(), 24f, 34f, 200f, 54f);
-            var cdScreamTmp = CreateText(cdScreamGo, fontThai, "[!] ใน: 3.5s", 22f, new Color(1f, 0.85f, 0.85f, 1f), TextAlignmentOptions.MidlineLeft);
+            SetBottomCenter(cdScreamGo.GetComponent<RectTransform>(), 0f, 32f, 440f, 54f);
+            var cdScreamTmp = CreateText(cdScreamGo, fontThai, "[!] สายผีตัด — รีบไปศาลเจ้าใน: 7.0s", 21f, new Color(1f, 0.85f, 0.85f, 1f), TextAlignmentOptions.Center);
             cdScreamTmp.fontStyle = FontStyles.Bold;
-
-            var replayScreamBtnGo = CreateTerminalButton(
-                phoneScreamContainer.transform, "Btn_ReplayScreamJumpscare", fontThai,
-                "เล่นซ้ำ\nJumpscare", 20f,
-                new Color(0.58f, 0.10f, 0.10f, 0.95f), new Color(0.95f, 0.25f, 0.25f, 1f), Color.white);
-            SetBottomRight(replayScreamBtnGo.GetComponent<RectTransform>(), -20f, 24f, 210f, 74f);
-            var replayScreamBtn = replayScreamBtnGo.GetComponent<Button>();
 
             ghostScreamRoot.SetActive(false);
 
@@ -1161,16 +1138,16 @@ namespace SecurityCenter.MainMenu.Editor
             pscImg.color = new Color(0f, 0f, 0f, 0.34f);
             pscImg.raycastTarget = false;
 
-            // Bottom-Left Status Pill (Matches Screenshots 2, 3, 4)
+            // Bottom-Left Status Pill
             var statusPill = CreateUI("BottomLeft_StatusBadge", viewport.transform);
             SetBottomLeft(statusPill.GetComponent<RectTransform>(), 28f, 18f, 440f, 46f);
             AddBorderedBox(statusPill, new Color(0.02f, 0.05f, 0.08f, 0.92f), new Color(0.18f, 0.56f, 0.68f, 1f), 2f, out _, out var statusBorderImg);
             var statusTxtGo = CreateUI("StatusText", statusPill.transform);
             Stretch(statusTxtGo.GetComponent<RectTransform>(), 12f);
-            var statusTmp = CreateText(statusTxtGo, fontThai, "► กดปุ่มสีเขียวเพื่อรับสาย", 20f, new Color(0.45f, 0.92f, 0.98f, 1f), TextAlignmentOptions.Center);
+            var statusTmp = CreateText(statusTxtGo, fontThai, "● โทรศัพท์สแตนด์บาย (ไม่มีสายเรียกเข้า)", 20f, new Color(0.52f, 0.68f, 0.74f, 0.9f), TextAlignmentOptions.Center);
             statusTmp.fontStyle = FontStyles.Bold;
 
-            // Bottom-Center Exit Phone Button: "▼ วางโทรศัพท์ลง / กลับโต๊ะ ▼" (Matches Screenshots 2, 3, 4)
+            // Bottom-Center Exit Phone Button
             var exitPhoneGo = CreateTerminalButton(
                 viewport.transform, "Btn_ExitPhone", fontThai,
                 "▼  วางโทรศัพท์ลง  /  กลับโต๊ะ  ▼", 22f,
@@ -1179,6 +1156,7 @@ namespace SecurityCenter.MainMenu.Editor
 
             // Wire PhoneUIController
             SetField(ctrl, "phoneMainPanel", mainPanel);
+            SetField(ctrl, "idleStandbyPanel", idleStandbyPanel);
             SetField(ctrl, "ringingPanel", ringingPanel);
             SetField(ctrl, "inCallPanel", inCallPanel);
             SetField(ctrl, "decisionPanel", decisionPanel);
@@ -1190,6 +1168,9 @@ namespace SecurityCenter.MainMenu.Editor
             SetField(ctrl, "phoneScreenBgImage", screenBgImg);
             SetField(ctrl, "phoneFrameBezelImage", bezelBorderImg);
 
+            SetField(ctrl, "idleClockText", idleClockTmp);
+            SetField(ctrl, "idleSubClockText", idleSubClockTmp);
+            SetField(ctrl, "ringingClockText", clockBotTmp);
             SetField(ctrl, "callerNameText", nameTmp);
             SetField(ctrl, "callerNumberText", numTmp);
             SetField(ctrl, "inCallCallerNameText", icNameTmp);
@@ -1207,14 +1188,6 @@ namespace SecurityCenter.MainMenu.Editor
             SetField(ctrl, "acceptOfferButton", accOfferBtn);
             SetField(ctrl, "declineOfferButton", decOfferBtn);
             SetField(ctrl, "exitPhoneButton", exitPhoneGo.GetComponent<Button>());
-
-            SetField(ctrl, "modeIncomingButton", btnIncomingGo.GetComponent<Button>());
-            SetField(ctrl, "modeFakeCaseButton", btnFakeGo.GetComponent<Button>());
-            SetField(ctrl, "modeRealCaseButton", btnRealGo.GetComponent<Button>());
-            SetField(ctrl, "modeGhostEyeballButton", btnEyeballGo.GetComponent<Button>());
-            SetField(ctrl, "modeGhostScreamButton", btnScreamGo.GetComponent<Button>());
-            SetField(ctrl, "replayEyeballJumpscareButton", replayEyeBtn);
-            SetField(ctrl, "replayScreamJumpscareButton", replayScreamBtn);
 
             SetList(ctrl, "eyeballPupils", pupilList);
             SetList(ctrl, "screamFloodTexts", screamTextList);
@@ -1250,68 +1223,351 @@ namespace SecurityCenter.MainMenu.Editor
         }
 
         // =====================================================================
-        // 3. EMBED MAIN MENU OVERLAY INTO test.unity
+        // 2.5 NOTE UI BUILDER (Sticky Note Survival Rules)
         // =====================================================================
-        private static void BuildEmbeddedMainMenuInTestScene(
-            TMP_FontAsset fontTitle,
-            TMP_FontAsset fontType,
+        private static void BuildNoteUIHierarchy(
+            GameObject noteUiGo,
             TMP_FontAsset fontThai,
-            Sprite sprScanline)
+            TMP_FontAsset fontType)
         {
-            // First ensure Main menu.unity is up to date, then copy its 4 roots into test.unity
+            ClearChildren(noteUiGo.transform);
+            Stretch(noteUiGo.GetComponent<RectTransform>(), 0f);
+
+            var ctrl = noteUiGo.GetComponent<NoteUIController>();
+            if (ctrl == null) ctrl = noteUiGo.AddComponent<NoteUIController>();
+
+            // Fullscreen dimmer when inspecting the note
+            var notePanelGo = CreateUI("NotePanel", noteUiGo.transform);
+            Stretch(notePanelGo.GetComponent<RectTransform>(), 0f);
+            var dimImg = notePanelGo.AddComponent<Image>();
+            dimImg.color = new Color(0.01f, 0.02f, 0.03f, 0.72f);
+            dimImg.raycastTarget = true;
+
+            // Centered Sticky Note Paper (560 x 700)
+            var paperGo = CreateUI("StickyNotePaper", notePanelGo.transform);
+            SetCentered(paperGo.GetComponent<RectTransform>(), 0f, 15f, 560f, 680f);
+            AddBorderedBox(paperGo, new Color(0.98f, 0.94f, 0.70f, 0.99f), new Color(0.55f, 0.42f, 0.20f, 0.95f), 3f);
+
+            // Tape strip accent at the top
+            var tapeGo = CreateUI("TapeAccent", paperGo.transform);
+            SetTopCenter(tapeGo.GetComponent<RectTransform>(), 0f, 12f, 180f, 28f);
+            tapeGo.AddComponent<Image>().color = new Color(0.88f, 0.82f, 0.60f, 0.75f);
+
+            // Note Title
+            var titleGo = CreateUI("NoteTitle", paperGo.transform);
+            SetTopCenter(titleGo.GetComponent<RectTransform>(), 0f, -22f, 520f, 42f);
+            var titleTmp = CreateText(titleGo, fontThai, "📌 GHOST SURVIVAL RULES", 24f, new Color(0.22f, 0.12f, 0.04f, 1f), TextAlignmentOptions.Center);
+            titleTmp.fontStyle = FontStyles.Bold;
+
+            var subTitleGo = CreateUI("NoteSubTitle", paperGo.transform);
+            SetTopCenter(subTitleGo.GetComponent<RectTransform>(), 0f, -62f, 520f, 28f);
+            var subTmp = CreateText(subTitleGo, fontThai, "— คู่มือรับมือเหตุการณ์เหนือธรรมชาติบนโต๊ะทำงาน —", 16f, new Color(0.48f, 0.28f, 0.08f, 0.9f), TextAlignmentOptions.Center);
+            subTmp.fontStyle = FontStyles.Bold;
+
+            var divLine = CreateUI("Divider", paperGo.transform);
+            SetTopCenter(divLine.GetComponent<RectTransform>(), 0f, -92f, 510f, 2f);
+            divLine.AddComponent<Image>().color = new Color(0.70f, 0.58f, 0.35f, 0.8f);
+
+            // Note Content
+            var contentGo = CreateUI("NoteContent", paperGo.transform);
+            SetTopCenter(contentGo.GetComponent<RectTransform>(), 0f, -104f, 510f, 480f);
+            string noteBody =
+                "เมื่อรับสายผีแล้ววางสาย เวลานับถอยหลังจะเริ่มขึ้นทันที!\n" +
+                "ให้กด [A] หรือ [D] หันไปที่ \"ศาลเจ้า\" ด้านหลังห้อง แล้วเลือกบทสวดมนต์ให้ตรงกับประเภทผี:\n\n" +
+                "1. ผีพูดขู่ / Threatening Voice (\"จะมาหลอกหลอน...\")\n" +
+                "   ► สวด: <color=#b45309><b>บทแผ่เมตตา (Chant of Compassion)</b></color>\n\n" +
+                "2. ผีเสียงกรี๊ด / Screaming Ghost (\"กรี๊ดดดดดด!\")\n" +
+                "   ► สวด: <color=#b91c1c><b>บทไล่ผี (Chant of Exorcism)</b></color>\n\n" +
+                "--------------------------------------------------\n" +
+                "<b>[!] บทลงโทษ (Debuff & Sanity):</b>\n" +
+                "• สวดไม่ทัน / เลือกผิด: โดนดีบัฟ (ตาบอดข้างเดียว / จอเบลอ) และสูญเสีย SANITY -30% ทันที!\n" +
+                "• สวดถูกต้องและทันเวลา: รอดชีวิต และฟื้นฟู SANITY +15%\n\n" +
+                "<b>[!] เคล็ดลับการเอาชีวิตรอด:</b>\n" +
+                "• สามารถกด [SPACEBAR] ค้าง เพื่อหลับตาตั้งสติและค่อยๆ ฟื้นฟู SANITY ช้าๆ ได้ตลอดเวลา";
+
+            var contentTmp = CreateText(contentGo, fontThai, noteBody, 18f, new Color(0.16f, 0.10f, 0.04f, 1f), TextAlignmentOptions.TopLeft);
+            contentTmp.lineSpacing = 10f;
+
+            // Close Note Button
+            var closeBtnGo = CreateTerminalButton(
+                paperGo.transform, "CloseNoteBtn", fontThai,
+                "▼  วางกระดาษลง (PUT DOWN)  ▼", 20f,
+                new Color(0.85f, 0.45f, 0.18f, 1f), new Color(0.65f, 0.30f, 0.10f, 1f), Color.white);
+            SetBottomCenter(closeBtnGo.GetComponent<RectTransform>(), 0f, 20f, 360f, 48f);
+            var closeBtn = closeBtnGo.GetComponent<Button>();
+
+            SetField(ctrl, "notePanel", notePanelGo);
+            SetField(ctrl, "noteTitleText", titleTmp);
+            SetField(ctrl, "noteContentText", contentTmp);
+            SetField(ctrl, "closeNoteButton", closeBtn);
+
+            notePanelGo.SetActive(false);
+        }
+
+        // =====================================================================
+        // 3. REMOVE EMBEDDED MAIN MENU & BUILD SANITY UI + WIRE SYSTEMS IN test.unity
+        // =====================================================================
+        private static void RemoveEmbeddedMainMenuFromTestScene()
+        {
             string[] menuRoots = { "_MenuSystems", "Canvas_Background", "Canvas_UI", "Canvas_FX" };
             foreach (var rName in menuRoots)
             {
                 var existing = GameObject.Find(rName);
                 if (existing != null) Object.DestroyImmediate(existing);
             }
+        }
 
-            Scene testScene = SceneManager.GetActiveScene();
-            Scene menuScene = EditorSceneManager.OpenScene("Assets/Cee/Main menu.unity", OpenSceneMode.Additive);
-
-            var copiedRoots = new List<GameObject>();
-            foreach (var rootObj in menuScene.GetRootGameObjects())
+        private static void BuildSanityAndWireSystemsInTestScene(
+            GameObject gameCanvasGo,
+            TMP_FontAsset fontThai,
+            TMP_FontAsset fontType,
+            Sprite sprVignette)
+        {
+            // 1. Build SanityUI inside GameUI_Canvas
+            var sanityUiGo = FindChildTransform(gameCanvasGo.transform, "SanityUI")?.gameObject;
+            if (sanityUiGo == null)
             {
-                foreach (var targetName in menuRoots)
+                sanityUiGo = CreateUI("SanityUI", gameCanvasGo.transform);
+            }
+            ClearChildren(sanityUiGo.transform);
+            Stretch(sanityUiGo.GetComponent<RectTransform>(), 0f);
+
+            var sanityCtrl = sanityUiGo.GetComponent<SanityUIController>();
+            if (sanityCtrl == null) sanityCtrl = sanityUiGo.AddComponent<SanityUIController>();
+
+            // Layer A: Progressive Dark Vignette around screen edges (steps every 10% Sanity drop)
+            var vigGo = CreateUI("SanityVignetteEdge", sanityUiGo.transform);
+            Stretch(vigGo.GetComponent<RectTransform>(), 0f);
+            var vigImg = vigGo.AddComponent<Image>();
+            vigImg.sprite = sprVignette;
+            vigImg.color = new Color(0f, 0f, 0f, 0f);
+            vigImg.raycastTarget = false;
+
+            // Layer B: Core darkness overlay (kicks in below 40% Sanity and reaches 100% black at 0% Sanity)
+            var coreBlackGo = CreateUI("SanityPitchBlackCore", sanityUiGo.transform);
+            Stretch(coreBlackGo.GetComponent<RectTransform>(), 0f);
+            var coreBlackImg = coreBlackGo.AddComponent<Image>();
+            coreBlackImg.color = new Color(0f, 0f, 0f, 0f);
+            coreBlackImg.raycastTarget = false;
+
+            // Layer C: Hold Spacebar Close-Eyes Pitch-Black Overlay (blocks clicks while held)
+            var closeEyesGo = CreateUI("CloseEyesOverlayRoot", sanityUiGo.transform);
+            Stretch(closeEyesGo.GetComponent<RectTransform>(), 0f);
+            var closeEyesImg = closeEyesGo.AddComponent<Image>();
+            closeEyesImg.color = new Color(0.005f, 0.005f, 0.008f, 0.985f);
+            closeEyesImg.raycastTarget = true;
+
+            var closeEyesBox = CreateUI("CloseEyesStatusBox", closeEyesGo.transform);
+            SetCentered(closeEyesBox.GetComponent<RectTransform>(), 0f, 0f, 760f, 120f);
+            var closeEyesTmp = CreateText(
+                closeEyesBox, fontType,
+                "EYES CLOSED  //  BREATHING SLOWLY... (+SANITY)\n<size=75%>[ RELEASE SPACEBAR TO OPEN EYES ]</size>",
+                26f, new Color(0.55f, 0.94f, 0.72f, 0.90f), TextAlignmentOptions.Center);
+            closeEyesTmp.fontStyle = FontStyles.Bold;
+            closeEyesGo.SetActive(false);
+
+            // Layer D: Top Minimal Sanity HUD Bar (Always visible at top-center)
+            var topBarGo = CreateUI("SanityTopBarRoot", sanityUiGo.transform);
+            SetTopCenter(topBarGo.GetComponent<RectTransform>(), 0f, -12f, 520f, 52f);
+            AddBorderedBox(topBarGo, new Color(0.02f, 0.04f, 0.06f, 0.90f), new Color(0.18f, 0.42f, 0.52f, 0.92f), 2f);
+
+            var lblGo = CreateUI("SanityLabel", topBarGo.transform);
+            SetTopLeft(lblGo.GetComponent<RectTransform>(), 14f, -6f, 110f, 22f);
+            var lblTmp = CreateText(lblGo, fontType, "SANITY", 17f, new Color(0.86f, 0.94f, 0.98f, 1f), TextAlignmentOptions.MidlineLeft);
+            lblTmp.fontStyle = FontStyles.Bold;
+
+            var pctGo = CreateUI("SanityPercent", topBarGo.transform);
+            SetTopRight(pctGo.GetComponent<RectTransform>(), -14f, -6f, 90f, 22f);
+            var pctTmp = CreateText(pctGo, fontType, "100%", 18f, new Color(0.24f, 0.88f, 0.54f, 1f), TextAlignmentOptions.MidlineRight);
+            pctTmp.fontStyle = FontStyles.Bold;
+
+            var hintGo = CreateUI("SanityDeltaHint", topBarGo.transform);
+            SetTopCenter(hintGo.GetComponent<RectTransform>(), 10f, -6f, 280f, 22f);
+            var hintTmp = CreateText(hintGo, fontType, "[HOLD SPACE : CLOSE EYES]", 14f, new Color(0.62f, 0.78f, 0.84f, 0.85f), TextAlignmentOptions.Center);
+
+            var barTrackGo = CreateUI("SanityBarTrack", topBarGo.transform);
+            SetBottomCenter(barTrackGo.GetComponent<RectTransform>(), 0f, 8f, 492f, 12f);
+            var barTrackImg = barTrackGo.AddComponent<Image>();
+            barTrackImg.color = new Color(0.08f, 0.12f, 0.15f, 0.95f);
+            barTrackImg.raycastTarget = false;
+
+            var barFillGo = CreateUI("SanityBarFill", barTrackGo.transform);
+            var barFillRt = barFillGo.GetComponent<RectTransform>();
+            barFillRt.anchorMin = Vector2.zero;
+            barFillRt.anchorMax = Vector2.one;
+            barFillRt.offsetMin = Vector2.zero;
+            barFillRt.offsetMax = Vector2.zero;
+            var barFillImg = barFillGo.AddComponent<Image>();
+            barFillImg.color = new Color(0.24f, 0.88f, 0.54f, 1f);
+            barFillImg.raycastTarget = false;
+
+            SetField(sanityCtrl, "topBarRoot", topBarGo);
+            SetField(sanityCtrl, "sanityFillBarRect", barFillRt);
+            SetField(sanityCtrl, "sanityFillBarImage", barFillImg);
+            SetField(sanityCtrl, "sanityPercentText", pctTmp);
+            SetField(sanityCtrl, "sanityDeltaHintText", hintTmp);
+            SetField(sanityCtrl, "vignetteEdgeImage", vigImg);
+            SetField(sanityCtrl, "pitchBlackCoreImage", coreBlackImg);
+            SetField(sanityCtrl, "closeEyesOverlayRoot", closeEyesGo);
+            SetField(sanityCtrl, "closeEyesStatusText", closeEyesTmp);
+
+            // Layer E: Brightness Overlay inside GameUI_Canvas for GameSettingsApplier
+            var gameBrightGo = FindChildTransform(gameCanvasGo.transform, "FX_GameBrightnessOverlay")?.gameObject;
+            if (gameBrightGo == null)
+            {
+                gameBrightGo = CreateUI("FX_GameBrightnessOverlay", gameCanvasGo.transform);
+            }
+            Stretch(gameBrightGo.GetComponent<RectTransform>(), 0f);
+            var gameBrightImg = gameBrightGo.GetComponent<Image>();
+            if (gameBrightImg == null) gameBrightImg = gameBrightGo.AddComponent<Image>();
+            gameBrightImg.color = new Color(0f, 0f, 0f, 0f);
+            gameBrightImg.raycastTarget = false;
+
+            // Keep EndingUI on top of everything, followed by FX_GameBrightnessOverlay and SanityUI
+            var endingUiTr = FindChildTransform(gameCanvasGo.transform, "EndingUI");
+            var shrineUiTr = FindChildTransform(gameCanvasGo.transform, "ShrineUI");
+            var debuffUiTr = FindChildTransform(gameCanvasGo.transform, "DebuffUI");
+            if (debuffUiTr != null) debuffUiTr.SetAsLastSibling();
+            if (shrineUiTr != null) shrineUiTr.SetAsLastSibling();
+            sanityUiGo.transform.SetAsLastSibling();
+            gameBrightGo.transform.SetAsLastSibling();
+            if (endingUiTr != null) endingUiTr.SetAsLastSibling();
+
+            // Wire ShrineUIController chant button text references
+            if (shrineUiTr != null)
+            {
+                var shrineCtrl = shrineUiTr.GetComponent<ShrineUIController>();
+                if (shrineCtrl != null)
                 {
-                    if (rootObj.name == targetName)
+                    var btnA = shrineUiTr.Find("ChantPopupPanel/ChantBtnA")?.GetComponent<Button>();
+                    var btnB = shrineUiTr.Find("ChantPopupPanel/ChantBtnB")?.GetComponent<Button>();
+                    if (btnA != null)
                     {
-                        // Move the ORIGINAL objects (not Instantiate per-root) so that all cross-root
-                        // serialized references (e.g. MainMenuController -> Canvas_UI panels) stay intact.
-                        // The additive Main menu scene is closed afterwards WITHOUT saving, so the asset on disk is untouched.
-                        SceneManager.MoveGameObjectToScene(rootObj, testScene);
-                        copiedRoots.Add(rootObj);
+                        var txtA = btnA.GetComponentInChildren<TextMeshProUGUI>(true);
+                        if (txtA != null)
+                        {
+                            txtA.font = fontThai;
+                            SetField(shrineCtrl, "chantNameTextA", txtA);
+                        }
+                    }
+                    if (btnB != null)
+                    {
+                        var txtB = btnB.GetComponentInChildren<TextMeshProUGUI>(true);
+                        if (txtB != null)
+                        {
+                            txtB.font = fontThai;
+                            SetField(shrineCtrl, "chantNameTextB", txtB);
+                        }
                     }
                 }
             }
 
-            EditorSceneManager.CloseScene(menuScene, true);
-
-            // Elevate sorting order of Main Menu canvases so they sit cleanly above GameUI_Canvas (sortingOrder 10)
-            var overlayCanvases = new List<GameObject>();
-            GameObject sysGo = null;
-            foreach (var go in copiedRoots)
+            // 2. Wire GameSystems (SanityManager, GameSettingsApplier, NightGameManager, etc.)
+            var gameSystemsGo = GameObject.Find("GameSystems");
+            var nightConfig = AssetDatabase.LoadAssetAtPath<GameNightConfigSO>("Assets/Pete/ScriptableObjects/Config/GameNightConfig.asset");
+            if (gameSystemsGo != null)
             {
-                if (go.name == "_MenuSystems") sysGo = go;
-                var c = go.GetComponent<Canvas>();
-                if (c != null)
+                var timeMgr = gameSystemsGo.GetComponent<GameTimeManager>();
+                var scoreMgr = gameSystemsGo.GetComponent<ScoreManager>();
+                var emailMgr = gameSystemsGo.GetComponent<EmailManager>();
+                var phoneMgr = gameSystemsGo.GetComponent<PhoneManager>();
+                var ghostMgr = gameSystemsGo.GetComponent<GhostManager>();
+                var sanityMgr = gameSystemsGo.GetComponent<SanityManager>();
+                if (sanityMgr == null) sanityMgr = gameSystemsGo.AddComponent<SanityManager>();
+
+                var sysAudio = gameSystemsGo.GetComponent<AudioSource>();
+                if (sysAudio == null) sysAudio = gameSystemsGo.AddComponent<AudioSource>();
+
+                // Dedicated breathing AudioSource for SanityManager
+                AudioSource breathAudio = null;
+                var allSources = gameSystemsGo.GetComponents<AudioSource>();
+                if (allSources.Length >= 2)
                 {
-                    if (go.name == "Canvas_Background") c.sortingOrder = 50;
-                    else if (go.name == "Canvas_UI") c.sortingOrder = 60;
-                    else if (go.name == "Canvas_FX") c.sortingOrder = 100;
-                    overlayCanvases.Add(go);
+                    breathAudio = allSources[1];
                 }
+                else
+                {
+                    breathAudio = gameSystemsGo.AddComponent<AudioSource>();
+                    breathAudio.playOnAwake = false;
+                    breathAudio.loop = true;
+                }
+
+                SetField(sanityMgr, "config", nightConfig);
+                SetField(sanityMgr, "breathingAudioSource", breathAudio);
+
+                if (emailMgr != null)
+                    SetField(emailMgr, "notificationAudioSource", sysAudio);
+
+                var nightGm = gameSystemsGo.GetComponent<NightGameManager>();
+                if (nightGm != null)
+                {
+                    SetField(nightGm, "nightConfig", nightConfig);
+                    SetField(nightGm, "timeManager", timeMgr);
+                    SetField(nightGm, "scoreManager", scoreMgr);
+                    SetField(nightGm, "emailManager", emailMgr);
+                    SetField(nightGm, "phoneManager", phoneMgr);
+                    SetField(nightGm, "ghostManager", ghostMgr);
+                    SetField(nightGm, "sanityManager", sanityMgr);
+                }
+
+                var applier = gameSystemsGo.GetComponent<GameSettingsApplier>();
+                if (applier == null) applier = gameSystemsGo.AddComponent<GameSettingsApplier>();
+                SetField(applier, "brightnessOverlayImage", gameBrightImg);
+
+                var scanImgs = new List<Image>();
+                var crtScan = gameCanvasGo.transform.Find("ComputerUI/DesktopRootPanel/CRT_ViewportContainer/CRT_MonitorBezel/CRT_InnerDitherBezel/CRT_PhosphorScreen/CRT_ScreenScanlines")?.GetComponent<Image>();
+                if (crtScan != null) scanImgs.Add(crtScan);
+                var phoneScan = gameCanvasGo.transform.Find("PhoneUI/PhoneMainPanel/Phone_ViewportContainer/PhoneViewport_Scanlines")?.GetComponent<Image>();
+                if (phoneScan != null) scanImgs.Add(phoneScan);
+                SetList(applier, "crtScanlineImages", scanImgs);
             }
 
-            if (sysGo != null)
+            // 3. Ensure 3D Interactables have precise, non-overlapping Colliders
+            var lampGo = GameObject.Find("Lamp_A_01");
+            if (lampGo != null)
             {
-                var mainCtrl = sysGo.GetComponent<MainMenuController>();
-                if (mainCtrl != null)
-                {
-                    SetField(mainCtrl, "inSceneOverlayMode", true);
-                    SetField(mainCtrl, "gameSceneName", "test");
-                    SetList(mainCtrl, "overlayCanvasObjects", overlayCanvases);
-                }
+                var bc = lampGo.GetComponent<BoxCollider>();
+                if (bc == null) bc = lampGo.AddComponent<BoxCollider>();
+                bc.center = new Vector3(0f, 1.5f, 0f);
+                bc.size = new Vector3(1.25f, 3.2f, 1.25f);
+            }
+
+            var phone3d = GameObject.Find("phone1k");
+            if (phone3d != null)
+            {
+                var bc = phone3d.GetComponent<BoxCollider>();
+                if (bc == null) bc = phone3d.AddComponent<BoxCollider>();
+                bc.center = Vector3.zero;
+                // In local scale (5, 5, 5), size (0.09, 0.18, 0.08) produces world bounds ~ (0.45m, 0.90m, 0.40m)
+                bc.size = new Vector3(0.09f, 0.18f, 0.08f);
+
+                var io = phone3d.GetComponent<InteractableObject>();
+                var anch = GameObject.Find("Anchor_Phone");
+                if (io != null && anch != null) io.SetTarget(InspectTargetType.Phone, anch.transform);
+            }
+
+            var note3d = GameObject.Find("DeskStickyNote");
+            if (note3d != null)
+            {
+                var mc = note3d.GetComponent<MeshCollider>();
+                if (mc != null) Object.DestroyImmediate(mc);
+                var bc = note3d.GetComponent<BoxCollider>();
+                if (bc == null) bc = note3d.AddComponent<BoxCollider>();
+                bc.center = Vector3.zero;
+                // In local scale (0.20, 0.25, 1.00), size (1.4, 1.4, 0.5) gives a generous clickable box ~ (0.3m, 0.35m, 0.4m)
+                bc.size = new Vector3(1.4f, 1.4f, 0.5f);
+
+                var io = note3d.GetComponent<InteractableObject>();
+                var anch = GameObject.Find("Anchor_Note");
+                if (io != null && anch != null) io.SetTarget(InspectTargetType.Note, anch.transform);
+            }
+
+            var mon3d = GameObject.Find("Monitor 2");
+            if (mon3d != null)
+            {
+                var io = mon3d.GetComponent<InteractableObject>();
+                var anch = GameObject.Find("Anchor_Monitor");
+                if (io != null && anch != null) io.SetTarget(InspectTargetType.Computer, anch.transform);
             }
         }
 
@@ -1468,36 +1724,14 @@ namespace SecurityCenter.MainMenu.Editor
             return tmp;
         }
 
-        private static void SetField(Object target, string fieldName, Object val)
+        private static void SetField(Object target, string fieldName, object val)
         {
-            var so = new SerializedObject(target);
-            var p = so.FindProperty(fieldName);
-            if (p != null)
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public;
+            var f = target.GetType().GetField(fieldName, flags);
+            if (f != null)
             {
-                p.objectReferenceValue = val;
-                so.ApplyModifiedPropertiesWithoutUndo();
-            }
-        }
-
-        private static void SetField(Object target, string fieldName, string val)
-        {
-            var so = new SerializedObject(target);
-            var p = so.FindProperty(fieldName);
-            if (p != null)
-            {
-                p.stringValue = val;
-                so.ApplyModifiedPropertiesWithoutUndo();
-            }
-        }
-
-        private static void SetField(Object target, string fieldName, bool val)
-        {
-            var so = new SerializedObject(target);
-            var p = so.FindProperty(fieldName);
-            if (p != null)
-            {
-                p.boolValue = val;
-                so.ApplyModifiedPropertiesWithoutUndo();
+                f.SetValue(target, val);
+                EditorUtility.SetDirty(target);
             }
         }
 

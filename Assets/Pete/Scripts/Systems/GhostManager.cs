@@ -40,12 +40,65 @@ namespace Pete.Systems
         private void Awake()
         {
             if (Instance == null) Instance = this;
-            else if (Instance != this) Destroy(gameObject);
+            else if (Instance != this) { Destroy(gameObject); return; }
+
+            EnsureProceduralGhostAudio();
+        }
+
+        private void EnsureProceduralGhostAudio()
+        {
+            int sr = 22050;
+            if (heartbeatLoopClip == null)
+            {
+                int len = Mathf.RoundToInt(sr * 0.85f);
+                float[] data = new float[len];
+                for (int i = 0; i < len; i++)
+                {
+                    float t = (float)i / sr;
+                    float thump1 = (t < 0.14f) ? Mathf.Sin(2f * Mathf.PI * 52f * t) * Mathf.Exp(-t * 22f) : 0f;
+                    float thump2 = (t >= 0.22f && t < 0.38f) ? Mathf.Sin(2f * Mathf.PI * 46f * (t - 0.22f)) * Mathf.Exp(-(t - 0.22f) * 25f) * 0.8f : 0f;
+                    data[i] = Mathf.Clamp((thump1 + thump2) * 0.75f, -1f, 1f);
+                }
+                heartbeatLoopClip = AudioClip.Create("ProceduralHeartbeat", len, 1, sr, false);
+                heartbeatLoopClip.SetData(data, 0);
+            }
+
+            if (holyReliefClip == null)
+            {
+                int len = Mathf.RoundToInt(sr * 1.1f);
+                float[] data = new float[len];
+                for (int i = 0; i < len; i++)
+                {
+                    float t = (float)i / sr;
+                    float env = Mathf.Exp(-t * 3.2f);
+                    float c1 = Mathf.Sin(2f * Mathf.PI * 528f * t);
+                    float c2 = Mathf.Sin(2f * Mathf.PI * 792f * t) * 0.5f;
+                    data[i] = (c1 + c2) * env * 0.35f;
+                }
+                holyReliefClip = AudioClip.Create("ProceduralHolyRelief", len, 1, sr, false);
+                holyReliefClip.SetData(data, 0);
+            }
+
+            if (jumpscareRoarClip == null)
+            {
+                int len = Mathf.RoundToInt(sr * 0.9f);
+                float[] data = new float[len];
+                var rng = new System.Random(666);
+                for (int i = 0; i < len; i++)
+                {
+                    float t = (float)i / sr;
+                    float env = Mathf.Exp(-t * 2.8f);
+                    float shriek = Mathf.Sin(2f * Mathf.PI * (290f + Mathf.Sin(t * 45f) * 60f) * t);
+                    float noise = (float)(rng.NextDouble() * 2.0 - 1.0) * 0.5f;
+                    data[i] = Mathf.Clamp((shriek + noise) * env * 0.55f, -1f, 1f);
+                }
+                jumpscareRoarClip = AudioClip.Create("ProceduralJumpscareRoar", len, 1, sr, false);
+                jumpscareRoarClip.SetData(data, 0);
+            }
         }
 
         private void Update()
         {
-            // อัปเดตนับถอยหลังของผี
             if (IsCountdownActive)
             {
                 RemainingCountdown -= Time.deltaTime;
@@ -53,12 +106,10 @@ namespace Pete.Systems
 
                 if (RemainingCountdown <= 0f)
                 {
-                    // หมดเวลา สวดไม่ทัน โดนหลอก!
                     TriggerFail();
                 }
             }
 
-            // อัปเดตเวลานับถอยหลังของดีบัฟ
             if (IsDebuffActive)
             {
                 debuffTimer -= Time.deltaTime;
@@ -76,9 +127,10 @@ namespace Pete.Systems
             RemainingCountdown = TotalCountdown;
             IsCountdownActive = true;
 
-            // เริ่มเล่นเสียงหัวใจเต้น
             if (ghostAudioSource != null && heartbeatLoopClip != null)
             {
+                float ghostVol = PlayerPrefs.GetInt("MM_VolGhost", 90) / 100f;
+                ghostAudioSource.volume = Mathf.Clamp01(0.85f * ghostVol);
                 ghostAudioSource.clip = heartbeatLoopClip;
                 ghostAudioSource.loop = true;
                 ghostAudioSource.Play();
@@ -87,9 +139,6 @@ namespace Pete.Systems
             OnGhostCountdownStarted?.Invoke(TotalCountdown);
         }
 
-        /// <summary>
-        /// เมื่อผู้เล่นคลิกที่ศาลเจ้า จะเปิดเมนูบทสวดมนต์
-        /// </summary>
         public void OpenChantSelection()
         {
             if (!IsCountdownActive) return;
@@ -97,21 +146,16 @@ namespace Pete.Systems
             OnChantSelectionOpened?.Invoke(availableChants);
         }
 
-        /// <summary>
-        /// ผู้เล่นคลิกเลือกบทสวดมนต์
-        /// </summary>
         public void SelectChant(GhostChantSO chant)
         {
             if (!IsCountdownActive || chant == null) return;
 
             if (chant.countersGhostType == CurrentGhostType)
             {
-                // สวดถูกประเภท! รอดปลอดภัย
                 TriggerSuccess();
             }
             else
             {
-                // สวดผิดบท! โดนหลอกทันที
                 TriggerFail();
             }
         }
@@ -123,7 +167,8 @@ namespace Pete.Systems
 
             if (ghostAudioSource != null && holyReliefClip != null)
             {
-                ghostAudioSource.PlayOneShot(holyReliefClip);
+                float ghostVol = PlayerPrefs.GetInt("MM_VolGhost", 90) / 100f;
+                ghostAudioSource.PlayOneShot(holyReliefClip, ghostVol);
             }
 
             if (ScoreManager.Instance != null)
@@ -139,10 +184,12 @@ namespace Pete.Systems
             IsCountdownActive = false;
             StopHeartbeat();
 
-            // เล่นเสียง Jump-scare คำราม
             if (ghostAudioSource != null && jumpscareRoarClip != null)
             {
-                ghostAudioSource.PlayOneShot(jumpscareRoarClip);
+                float ghostVol = PlayerPrefs.GetInt("MM_VolGhost", 90) / 100f;
+                bool jumpCap = PlayerPrefs.GetInt("MM_JumpCap", 0) == 1;
+                if (jumpCap) ghostVol = Mathf.Min(ghostVol, 0.45f);
+                ghostAudioSource.PlayOneShot(jumpscareRoarClip, ghostVol);
             }
 
             if (ScoreManager.Instance != null)
@@ -150,7 +197,6 @@ namespace Pete.Systems
                 ScoreManager.Instance.RecordGhostResult(false);
             }
 
-            // ติดดีบัฟตามประเภทของผี
             float duration = (config != null) ? config.debuffDurationSeconds : 35f;
             ApplyDebuff(CurrentGhostType, duration);
         }

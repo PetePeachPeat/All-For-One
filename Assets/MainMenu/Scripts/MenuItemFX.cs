@@ -22,6 +22,12 @@ namespace SecurityCenter.MainMenu
         public Action<int> OnHovered;
         public Action<int> OnClicked;
 
+        public int ItemIndex
+        {
+            get => itemIndex;
+            set => itemIndex = value;
+        }
+
         public string DescriptionText
         {
             get => descriptionText;

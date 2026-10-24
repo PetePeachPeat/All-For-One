@@ -34,11 +34,15 @@ namespace Pete.Systems
             {
                 ScamsAccepted++;
                 NetScore -= 2; // หลงเชื่อกลโกง เสีย 2 แต้ม
+                if (SanityManager.Instance != null)
+                    SanityManager.Instance.OnScamAccepted();
             }
             else
             {
                 LegitJobsAccepted++;
                 NetScore += 1; // รับงานจริง ได้ 1 แต้ม
+                if (SanityManager.Instance != null)
+                    SanityManager.Instance.OnCorrectJobDecision();
             }
 
             OnScoreChanged?.Invoke(NetScore);
@@ -50,10 +54,14 @@ namespace Pete.Systems
             {
                 ScamsRejected++;
                 NetScore += 1; // ปฏิเสธมิจฉาชีพถูกต้อง ได้ 1 แต้ม
+                if (SanityManager.Instance != null)
+                    SanityManager.Instance.OnCorrectJobDecision();
             }
             else
             {
                 NetScore -= 1; // ปฏิเสธงานจริง เสีย 1 แต้ม
+                if (SanityManager.Instance != null)
+                    SanityManager.Instance.OnJobMissedOrDeclined();
             }
 
             OnScoreChanged?.Invoke(NetScore);
@@ -63,33 +71,46 @@ namespace Pete.Systems
         {
             MissedIgnoredEvents++;
             NetScore -= 1; // ละเลย/ไม่รับสาย เสีย 1 แต้ม
+            if (SanityManager.Instance != null)
+                SanityManager.Instance.OnJobMissedOrDeclined();
+
             OnScoreChanged?.Invoke(NetScore);
         }
 
         public void RecordGhostResult(bool survived)
         {
-            if (survived) GhostSurvivedCount++;
-            else GhostFailedCount++;
+            if (survived)
+            {
+                GhostSurvivedCount++;
+                if (SanityManager.Instance != null)
+                    SanityManager.Instance.OnGhostSurvived();
+            }
+            else
+            {
+                GhostFailedCount++;
+                if (SanityManager.Instance != null)
+                    SanityManager.Instance.OnGhostFailed();
+            }
         }
 
         public EndingType EvaluateEnding()
         {
-            int maxScamThreshold = (config != null) ? config.maxScamAcceptedForBadEnd : 2;
-            int minGoodScore = (config != null) ? config.minScoreForGoodEnd : 3;
-
-            // 1. ถ้าหลงเชื่อรับงานมิจฉาชีพสะสมถึงเกณฑ์ -> โดนหลอกหมดตัว (Bad End 1)
-            if (ScamsAccepted >= maxScamThreshold)
+            // 1. หาก Sanity เหลือ 0 ในระหว่างคืน -> จบเกมทันที เข้าสู่ฉากจบโดนหลอกเอาเงินและข้อมูล (Bad End 1)
+            if (SanityManager.Instance != null &&
+                (SanityManager.Instance.IsSanityDepleted || SanityManager.Instance.CurrentSanity <= 0.01f))
             {
                 return EndingType.BadEndScammed;
             }
 
-            // 2. ถ้าคะแนนสุทธิถึงเกณฑ์ และมีงานจริงที่รับไว้อย่างน้อย 1 งาน -> ได้งานทำ (Good End)
+            int minGoodScore = (config != null) ? config.minScoreForGoodEnd : 3;
+
+            // 2. รอดจนถึง 06:00 AM โดย Sanity > 0 และทำคะแนนงานที่ถูกได้ตามเกณฑ์ -> ได้งานทำ (Good End)
             if (NetScore >= minGoodScore && LegitJobsAccepted > 0)
             {
                 return EndingType.GoodEnd;
             }
 
-            // 3. ปฏิเสธ/เมินจนไม่มีงานทำ หรือคะแนนไม่พอ -> ตกงาน (Bad End 2)
+            // 3. รอดถึงเช้าแต่ผลงานไม่ถึงเกณฑ์ -> คนไร้งาน หางานไม่ได้ (Bad End 2)
             return EndingType.BadEndUnemployed;
         }
     }

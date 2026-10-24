@@ -17,7 +17,7 @@ namespace SecurityCenter.MainMenu.Editor
         private const string BaseDir = "Assets/MainMenu";
 
         [MenuItem("Tools/Security Center/Build Main Menu Scene")]
-        public static string BuildMainMenuScene(bool startInMainPreview = false)
+        public static string BuildMainMenuScene(bool startInMainPreview = true)
         {
             Scene activeScene = SceneManager.GetActiveScene();
             if (activeScene.path != TargetScenePath)
@@ -143,7 +143,7 @@ namespace SecurityCenter.MainMenu.Editor
             // 4. Canvas_UI (SortOrder 10)
             var canvasUi = CreateScreenCanvas("Canvas_UI", 10);
 
-            // FilmStripLeft (Ref 5 left vertical film strip border)
+            // FilmStripLeft
             BuildFilmStripLeft(canvasUi.transform);
 
             // HUD_Rec (Top-left ● REC)
@@ -171,7 +171,7 @@ namespace SecurityCenter.MainMenu.Editor
             var clockTmp = CreateTMP(hudClockGo, fontType, "00:00 AM", 26f, new Color(0.91f, 0.90f, 0.88f, 0.88f), TextAlignmentOptions.MidlineRight);
             clockTmp.characterSpacing = 10f;
 
-            // Bottom Hint Bar & Bottom-Right SEC-OS Tag
+            // Bottom Hint Bar & Bottom-Right Tag
             var hintGo = CreateUIObject("HintBar", canvasUi.transform);
             var hintRt = hintGo.GetComponent<RectTransform>();
             hintRt.anchorMin = new Vector2(0f, 0f);
@@ -179,7 +179,7 @@ namespace SecurityCenter.MainMenu.Editor
             hintRt.pivot = new Vector2(0f, 0f);
             hintRt.anchoredPosition = new Vector2(118f, 38f);
             hintRt.sizeDelta = new Vector2(1280f, 34f);
-            var hintTmp = CreateTMP(hintGo, fontType, "[W/S or ↑/↓] Scroll     [ENTER / CLICK] Select     [ESC / RMB] Back", 20f, new Color(0.85f, 0.85f, 0.82f, 0.68f), TextAlignmentOptions.MidlineLeft);
+            var hintTmp = CreateTMP(hintGo, fontType, "[W/S] NAVIGATE     [ENTER / CLICK] SELECT     [ESC / RMB] BACK", 20f, new Color(0.85f, 0.85f, 0.82f, 0.68f), TextAlignmentOptions.MidlineLeft);
 
             var secTagGo = CreateUIObject("Tag_SecOS", canvasUi.transform);
             var secRt = secTagGo.GetComponent<RectTransform>();
@@ -187,8 +187,8 @@ namespace SecurityCenter.MainMenu.Editor
             secRt.anchorMax = new Vector2(1f, 0f);
             secRt.pivot = new Vector2(1f, 0f);
             secRt.anchoredPosition = new Vector2(-64f, 38f);
-            secRt.sizeDelta = new Vector2(260f, 34f);
-            var secTmp = CreateTMP(secTagGo, fontType, "SEC-OS v1.0 ▌", 21f, new Color(0.29f, 0.87f, 0.50f, 0.85f), TextAlignmentOptions.MidlineRight);
+            secRt.sizeDelta = new Vector2(320f, 34f);
+            var secTmp = CreateTMP(secTagGo, fontType, "JOB HAUNTER v1.0", 21f, new Color(0.29f, 0.87f, 0.50f, 0.85f), TextAlignmentOptions.MidlineRight);
             secTmp.characterSpacing = 8f;
 
             var menuClock = hudClockGo.AddComponent<MenuClock>();
@@ -198,35 +198,16 @@ namespace SecurityCenter.MainMenu.Editor
             SetSerializedField(menuClock, "secOsTagText", secTmp);
 
             // =================================================================
-            // TITLE BLOCK (Ref 1 3D Extrude + Ref 2 Glitch + Stamp Subtitle)
+            // TITLE BLOCK: "JOB HAUNTER" + Stamp Subtitle
             // =================================================================
             var titleBlockGo = CreateUIObject("TitleBlock_Root", canvasUi.transform);
             SetTopLeft(titleBlockGo.GetComponent<RectTransform>(), 118f, -110f, 1180f, 250f);
 
-            var title3DGo = BuildGlitch3DTitle(titleBlockGo.transform, fontTitle, sprScanline, "SECURITY CENTER", 104f, 12f, out var titleExtrude, out var titleGlitch);
-
-            // Stamp Subtitle Box (Ref 2 & Ref 5 "r e q u i e m")
-            var stampGo = CreateUIObject("Stamp_Subtitle", titleBlockGo.transform);
-            SetTopLeft(stampGo.GetComponent<RectTransform>(), 0f, -138f, 460f, 64f);
-            var stampImg = stampGo.AddComponent<Image>();
-            stampImg.sprite = sprStamp;
-            stampImg.color = Color.white;
-            stampImg.raycastTarget = false;
-
-            var stampTxtGo = CreateUIObject("Stamp_Text", stampGo.transform);
-            StretchFull(stampTxtGo.GetComponent<RectTransform>(), 0f);
-            var stampTmp = CreateTMP(stampTxtGo, fontType, "NIGHT SHIFT", 30f, new Color(0.06f, 0.06f, 0.06f, 0.98f), TextAlignmentOptions.Center);
-            stampTmp.fontStyle = FontStyles.Bold;
-            stampTmp.characterSpacing = 32f;
-            stampTmp.textWrappingMode = TextWrappingModes.NoWrap;
-            var stampTypewriter = stampTxtGo.AddComponent<TypewriterText>();
-            SetSerializedField(stampTypewriter, "targetText", stampTmp);
-            SetSerializedField(stampTypewriter, "charDelay", 0.03f);
-            SetSerializedField(stampTypewriter, "keySfx", "typewriter_key");
-            SetSerializedField(stampTypewriter, "finishSfx", "typewriter_ding");
+            var title3DGo = BuildGlitch3DTitle(titleBlockGo.transform, fontTitle, sprScanline, "JOB HAUNTER", 112f, 12f, out var titleExtrude, out var titleGlitch);
+            TypewriterText stampTypewriter = null;
 
             // =================================================================
-            // PANEL 1: BOOT SCREEN (Ref 3 CRT Static + ▶ Play Icon)
+            // PANEL 1: BOOT SCREEN
             // =================================================================
             var panelBoot = CreateUIObject("Panel_Boot", canvasUi.transform);
             StretchFull(panelBoot.GetComponent<RectTransform>(), 0f);
@@ -256,7 +237,7 @@ namespace SecurityCenter.MainMenu.Editor
             pressKeyTmp.characterSpacing = 12f;
 
             // =================================================================
-            // PANEL 2: MAIN MENU (Ref 5 Left Menu + Highlight Bar)
+            // PANEL 2: MAIN MENU (ONLY 3 BUTTONS: Find Job, Settings, Quit)
             // =================================================================
             var panelMain = CreateUIObject("Panel_Main", canvasUi.transform);
             StretchFull(panelMain.GetComponent<RectTransform>(), 0f);
@@ -273,23 +254,30 @@ namespace SecurityCenter.MainMenu.Editor
             var mainItemsList = new List<MenuItemFX>();
             string[] mainTitles =
             {
-                "Continue",
-                "New Shift",
+                "Find Job",
                 "Settings",
-                "Credits",
                 "Quit"
             };
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < 3; i++)
             {
-                var item = CreateMenuItemRow(panelMain.transform, fontType, i, mainTitles[i], 144f, -500f - i * 62f, 340f, 50f, i == 4);
+                var item = CreateMenuItemRow(panelMain.transform, fontType, i, mainTitles[i], 144f, -505f - i * 72f, 340f, 54f, i == 2);
                 mainItemsList.Add(item);
             }
-            // Default highlight on item 1 (New Shift) for immediate visual clarity in Edit mode
-            mainItemsList[0].Interactable = false;
-            mainItemsList[1].SetSelected(true, false);
+            mainItemsList[0].Interactable = true;
+            mainItemsList[0].SetSelected(true, false);
+
+            // Description Box next to Main Menu Buttons
+            var mainDescGo = CreateUIObject("MainMenu_Description", panelMain.transform);
+            SetTopLeft(mainDescGo.GetComponent<RectTransform>(), 520f, -505f, 680f, 64f);
+            var mainDescTmp = CreateTMP(mainDescGo, fontType,
+                "Clock in at 00:00 AM. Check emails, inspect websites, answer calls, and survive until 06:00 AM.",
+                20f, new Color(0.75f, 0.78f, 0.80f, 0.88f), TextAlignmentOptions.TopLeft);
+            var mainDescTypewriter = mainDescGo.AddComponent<TypewriterText>();
+            SetSerializedField(mainDescTypewriter, "targetText", mainDescTmp);
+            SetSerializedField(mainDescTypewriter, "charDelay", 0.015f);
 
             // =================================================================
-            // PANEL 3: GAME MODE SELECT (Ref 5 "GAME MODE" Layout)
+            // PANEL 3: GAME MODE SELECT (Kept hidden for compatibility)
             // =================================================================
             var panelMode = CreateUIObject("Panel_GameMode", canvasUi.transform);
             StretchFull(panelMode.GetComponent<RectTransform>(), 0f);
@@ -300,12 +288,7 @@ namespace SecurityCenter.MainMenu.Editor
             modeHeaderTmp.characterSpacing = 10f;
 
             var modeItemsList = new List<MenuItemFX>();
-            string[] modeTitles =
-            {
-                "Casual",
-                "Standard",
-                "Insanity"
-            };
+            string[] modeTitles = { "Casual", "Standard", "Insanity" };
             for (int i = 0; i < 3; i++)
             {
                 var item = CreateMenuItemRow(panelMode.transform, fontType, i, modeTitles[i], 144f, -500f - i * 64f, 340f, 52f, i == 2);
@@ -314,12 +297,12 @@ namespace SecurityCenter.MainMenu.Editor
             modeItemsList[1].SetSelected(true, false);
 
             // =================================================================
-            // PANEL 4: SETTINGS (Ref 4 Layout + Ref 1 3D OPTIONS Header)
+            // PANEL 4: SETTINGS
             // =================================================================
             var panelSettings = BuildSettingsPanel(canvasUi.transform, fontTitle, fontType, fontThai, sprScanline, sprShrine, settingsMgr, staticCtrl);
 
             // =================================================================
-            // PANEL 5: CREDITS (Ref 2 White Label Strip + Scrolling Text)
+            // PANEL 5: CREDITS
             // =================================================================
             var panelCredits = BuildCreditsPanel(canvasUi.transform, fontType, fontThai, out var creditsScrollRt);
 
@@ -361,8 +344,9 @@ namespace SecurityCenter.MainMenu.Editor
             SetSerializedField(settingsMgr, "brightnessOverlayImage", brightImg);
 
             // Wire MainMenuController
-            SetSerializedField(mainCtrl, "gameSceneName", "map 1");
+            SetSerializedField(mainCtrl, "gameSceneName", "test");
             SetSerializedField(mainCtrl, "saveKey", "SC_HasSave");
+            SetSerializedField(mainCtrl, "inSceneOverlayMode", false);
             SetSerializedField(mainCtrl, "panelBoot", panelBoot);
             SetSerializedField(mainCtrl, "panelMain", panelMain);
             SetSerializedField(mainCtrl, "panelGameMode", panelMode);
@@ -376,6 +360,8 @@ namespace SecurityCenter.MainMenu.Editor
             SetSerializedField(mainCtrl, "titleGlitch", titleGlitch);
             SetSerializedField(mainCtrl, "titleExtrude", titleExtrude);
             SetSerializedField(mainCtrl, "stampTypewriter", stampTypewriter);
+            SetSerializedField(mainCtrl, "mainDescTypewriter", mainDescTypewriter);
+            SetSerializedField(mainCtrl, "mainDescRect", mainDescGo.GetComponent<RectTransform>());
             SetSerializedList(mainCtrl, "mainItems", mainItemsList);
             SetSerializedList(mainCtrl, "gameModeItems", modeItemsList);
             SetSerializedField(mainCtrl, "confirmPromptText", confirmPromptTmp);
@@ -387,7 +373,7 @@ namespace SecurityCenter.MainMenu.Editor
             SetSerializedField(mainCtrl, "easterEggs", easterEggs);
             SetSerializedField(mainCtrl, "bottomHintText", hintTmp);
 
-            // Set initial active state (Show Main Menu in Editor view if requested, or Boot)
+            // Set initial active state
             panelBoot.SetActive(!startInMainPreview);
             panelMain.SetActive(startInMainPreview);
             panelMode.SetActive(false);
@@ -417,7 +403,6 @@ namespace SecurityCenter.MainMenu.Editor
             lineImg.color = new Color(0.88f, 0.88f, 0.85f, 0.32f);
             lineImg.raycastTarget = false;
 
-            // Horizontal film ticks every 72px
             for (int i = -7; i <= 7; i++)
             {
                 var tickGo = CreateUIObject($"Tick_{i + 7:00}", stripGo.transform);
@@ -446,11 +431,9 @@ namespace SecurityCenter.MainMenu.Editor
             SetTopLeft(rootGo.GetComponent<RectTransform>(), 0f, 0f, 1180f, 132f);
             rootGo.GetComponent<RectTransform>().localEulerAngles = new Vector3(0f, tiltAngleY, 0f);
 
-            // 1. Extrude Container (10 3D silver-gray depth layers behind face — Ref 1)
             var extrudeGo = CreateUIObject("ExtrudeContainer", rootGo.transform);
             StretchFull(extrudeGo.GetComponent<RectTransform>(), 0f);
 
-            // 2. Glitch Red Layer (Ref 2 RGB Split)
             var redGo = CreateUIObject("Glitch_Red", rootGo.transform);
             StretchFull(redGo.GetComponent<RectTransform>(), 0f);
             redGo.GetComponent<RectTransform>().anchoredPosition = new Vector2(-2.5f, 0f);
@@ -458,7 +441,6 @@ namespace SecurityCenter.MainMenu.Editor
             redTmp.characterSpacing = 4f;
             redTmp.textWrappingMode = TextWrappingModes.NoWrap;
 
-            // 3. Glitch Cyan Layer (Ref 2 RGB Split)
             var cyanGo = CreateUIObject("Glitch_Cyan", rootGo.transform);
             StretchFull(cyanGo.GetComponent<RectTransform>(), 0f);
             cyanGo.GetComponent<RectTransform>().anchoredPosition = new Vector2(2.5f, 0f);
@@ -466,7 +448,6 @@ namespace SecurityCenter.MainMenu.Editor
             cyanTmp.characterSpacing = 4f;
             cyanTmp.textWrappingMode = TextWrappingModes.NoWrap;
 
-            // 4. Main Face Text (Chrome White-to-Silver vertical gradient — Ref 1 & Ref 2)
             var faceGo = CreateUIObject("Face", rootGo.transform);
             StretchFull(faceGo.GetComponent<RectTransform>(), 0f);
             var faceTmp = CreateTMP(faceGo, fontTitle, titleString, fontSize, Color.white, TextAlignmentOptions.MidlineLeft);
@@ -480,7 +461,6 @@ namespace SecurityCenter.MainMenu.Editor
                 new Color(0.72f, 0.75f, 0.78f, 1f)
             );
 
-            // 5. Horizontal Scanline Overlay across title (Ref 2)
             var scanGo = CreateUIObject("ScanlineMask", rootGo.transform);
             StretchFull(scanGo.GetComponent<RectTransform>(), 0f);
             var scanImg = scanGo.AddComponent<Image>();
@@ -561,17 +541,17 @@ namespace SecurityCenter.MainMenu.Editor
             var panel = CreateUIObject("Panel_Settings", parent);
             StretchFull(panel.GetComponent<RectTransform>(), 0f);
 
-            // Top-Left Breadcrumb (Ref 4 "OPTIONS / GAMEPLAY")
+            // Top-Left Breadcrumb
             var bcGo = CreateUIObject("Breadcrumb", panel.transform);
             SetTopLeft(bcGo.GetComponent<RectTransform>(), 118f, -92f, 680f, 32f);
-            var bcTmp = CreateTMP(bcGo, fontType, "OPTIONS  /  VIDEO", 20f, new Color(0.68f, 0.72f, 0.74f, 0.85f), TextAlignmentOptions.MidlineLeft);
+            var bcTmp = CreateTMP(bcGo, fontType, "OPTIONS  /  VIDEO  (Q / E)", 20f, new Color(0.68f, 0.72f, 0.74f, 0.85f), TextAlignmentOptions.MidlineLeft);
 
-            // Ref 1 3D Extruded "OPTIONS" Header on Left
+            // 3D Extruded "OPTIONS" Header on Left
             var optHeaderHolder = CreateUIObject("Header3D_Holder", panel.transform);
             SetTopLeft(optHeaderHolder.GetComponent<RectTransform>(), 118f, -135f, 620f, 150f);
             BuildGlitch3DTitle(optHeaderHolder.transform, fontTitle, sprScanline, "OPTIONS", 124f, 18f, out var optExtrude, out _);
 
-            // Left Column: 5 Right-Aligned Categories (Ref 1 & Ref 4)
+            // Left Column: 5 Right-Aligned Categories
             var catListGo = CreateUIObject("CategoryList", panel.transform);
             SetTopLeft(catListGo.GetComponent<RectTransform>(), 80f, -310f, 640f, 360f);
             var catListComp = catListGo.AddComponent<SettingsCategoryList>();
@@ -589,47 +569,61 @@ namespace SecurityCenter.MainMenu.Editor
             {
                 var cGo = CreateUIObject($"Category_{i:00}", catListGo.transform);
                 SetTopLeft(cGo.GetComponent<RectTransform>(), 0f, -i * 62f, 640f, 54f);
+                var hitImg = cGo.AddComponent<Image>();
+                hitImg.color = new Color(0f, 0f, 0f, 0.01f); // full row clickable
 
-                var cTmp = CreateTMP(cGo, fontTitle, catLabels[i], 38f,
+                var lblGo = CreateUIObject("Label", cGo.transform);
+                StretchFull(lblGo.GetComponent<RectTransform>(), 0f);
+                var cTmp = CreateTMP(lblGo, fontTitle, catLabels[i], 38f,
                     i == 0 ? new Color(0.96f, 0.96f, 0.94f, 1f) : new Color(0.45f, 0.48f, 0.50f, 0.55f),
                     TextAlignmentOptions.MidlineRight);
                 cTmp.fontStyle = FontStyles.Bold;
                 cTmp.characterSpacing = 6f;
                 cTmp.textWrappingMode = TextWrappingModes.NoWrap;
-                cTmp.raycastTarget = true;
+                cTmp.raycastTarget = false;
 
                 var cBtn = cGo.AddComponent<SettingsCategoryButton>();
-                cBtn.categoryIndex = i;
-                cBtn.rectTransform = cGo.GetComponent<RectTransform>();
-                cBtn.labelText = cTmp;
+                SetSerializedField(cBtn, "categoryIndex", i);
+                SetSerializedField(cBtn, "rectTransform", cGo.GetComponent<RectTransform>());
+                SetSerializedField(cBtn, "labelText", cTmp);
                 catBtns.Add(cBtn);
             }
             SetSerializedList(catListComp, "categoryButtons", catBtns);
 
-            // Shrine Calibration Box (Ref 4)
+            // Shrine Calibration Box
             var calibBoxGo = CreateUIObject("Shrine_CalibrationBox", panel.transform);
-            SetTopLeft(calibBoxGo.GetComponent<RectTransform>(), 118f, -720f, 520f, 120f);
+            SetTopLeft(calibBoxGo.GetComponent<RectTransform>(), 118f, -690f, 520f, 116f);
             var calibBg = calibBoxGo.AddComponent<Image>();
             calibBg.color = new Color(0.03f, 0.03f, 0.03f, 0.92f);
 
             var shrineIconGo = CreateUIObject("Shrine_Silhouette", calibBoxGo.transform);
-            SetTopLeft(shrineIconGo.GetComponent<RectTransform>(), 22f, -12f, 96f, 96f);
+            SetTopLeft(shrineIconGo.GetComponent<RectTransform>(), 22f, -10f, 96f, 96f);
             var shrineImg = shrineIconGo.AddComponent<Image>();
             shrineImg.sprite = sprShrine;
             shrineImg.color = new Color(0.88f, 0.88f, 0.85f, 0.42f);
 
             var calibTxtGo = CreateUIObject("Calibration_Hint", calibBoxGo.transform);
-            SetTopLeft(calibTxtGo.GetComponent<RectTransform>(), 132f, -24f, 360f, 76f);
+            SetTopLeft(calibTxtGo.GetComponent<RectTransform>(), 132f, -20f, 360f, 76f);
             var calibTmp = CreateTMP(calibTxtGo, fontType, "BRIGHTNESS CALIBRATION:\nAdjust until the shrine is barely visible", 17f, new Color(0.72f, 0.74f, 0.75f, 0.85f), TextAlignmentOptions.MidlineLeft);
             calibTmp.textWrappingMode = TextWrappingModes.NoWrap;
 
-            // Right Panel: Dark Charcoal Rows Table (Ref 4)
-            var rightPanelGo = CreateUIObject("RowsPanel_Right", panel.transform);
-            SetTopLeft(rightPanelGo.GetComponent<RectTransform>(), 790f, -180f, 1020f, 640f);
-            var rpImg = rightPanelGo.AddComponent<Image>();
-            rpImg.color = new Color(0.06f, 0.07f, 0.08f, 0.82f);
+            // Clickable Back Button in Settings Panel
+            var backBtnGo = CreateUIObject("Btn_BackToMenu", panel.transform);
+            SetTopLeft(backBtnGo.GetComponent<RectTransform>(), 118f, -828f, 310f, 50f);
+            var backBtnImg = backBtnGo.AddComponent<Image>();
+            backBtnImg.color = new Color(0.14f, 0.16f, 0.18f, 0.92f);
+            var backBtn = backBtnGo.AddComponent<Button>();
+            var backLblGo = CreateUIObject("Label", backBtnGo.transform);
+            StretchFull(backLblGo.GetComponent<RectTransform>(), 0f);
+            var backLblTmp = CreateTMP(backLblGo, fontType, "<  BACK TO MENU", 22f, new Color(0.95f, 0.95f, 0.92f, 1f), TextAlignmentOptions.Center);
+            backLblTmp.fontStyle = FontStyles.Bold;
 
-            // Top & Bottom thin white accent borders on right panel (Ref 4)
+            // Right Panel: Dark Charcoal Rows Table
+            var rightPanelGo = CreateUIObject("RowsPanel_Right", panel.transform);
+            SetTopLeft(rightPanelGo.GetComponent<RectTransform>(), 790f, -180f, 1020f, 698f);
+            var rpImg = rightPanelGo.AddComponent<Image>();
+            rpImg.color = new Color(0.06f, 0.07f, 0.08f, 0.86f);
+
             var topBorderGo = CreateUIObject("TopBorder", rightPanelGo.transform);
             SetTopLeft(topBorderGo.GetComponent<RectTransform>(), 0f, 0f, 1020f, 3f);
             topBorderGo.AddComponent<Image>().color = new Color(0.85f, 0.88f, 0.90f, 0.45f);
@@ -647,11 +641,11 @@ namespace SecurityCenter.MainMenu.Editor
             };
             string[] previewValues =
             {
-                "◄ █████░░░░░ 50 ►",
+                "< [|||||.....] 50 >",
                 "HIGH",
                 "ON",
                 "FULLSCREEN",
-                "1920×1080",
+                "1920x1080",
                 "ON",
                 "60 FPS"
             };
@@ -664,7 +658,7 @@ namespace SecurityCenter.MainMenu.Editor
                 hlImg.color = i == 0 ? new Color(0.95f, 0.95f, 0.95f, 1f) : new Color(0f, 0f, 0f, 0f);
 
                 var lGo = CreateUIObject("RowLabel", rGo.transform);
-                SetTopLeft(lGo.GetComponent<RectTransform>(), 24f, 0f, 540f, 54f);
+                SetTopLeft(lGo.GetComponent<RectTransform>(), 24f, 0f, 520f, 54f);
                 var lTmp = CreateTMP(lGo, fontType, previewLabels[i], 23f,
                     i == 0 ? new Color(0.04f, 0.04f, 0.04f, 1f) : new Color(0.82f, 0.85f, 0.86f, 1f),
                     TextAlignmentOptions.MidlineLeft);
@@ -673,7 +667,7 @@ namespace SecurityCenter.MainMenu.Editor
                 SetSerializedField(scram, "targetText", lTmp);
 
                 var vGo = CreateUIObject("RowValue", rGo.transform);
-                SetTopLeft(vGo.GetComponent<RectTransform>(), 560f, 0f, 412f, 54f);
+                SetTopLeft(vGo.GetComponent<RectTransform>(), 540f, 0f, 432f, 54f);
                 var vTmp = CreateTMP(vGo, fontType, previewValues[i], 23f,
                     i == 0 ? new Color(0.04f, 0.04f, 0.04f, 1f) : new Color(0.92f, 0.92f, 0.90f, 1f),
                     TextAlignmentOptions.MidlineRight);
@@ -688,10 +682,26 @@ namespace SecurityCenter.MainMenu.Editor
                 rowsList.Add(rowComp);
             }
 
+            // Bottom description box inside RowsPanel_Right
+            var descDividerGo = CreateUIObject("DescDivider", rightPanelGo.transform);
+            SetTopLeft(descDividerGo.GetComponent<RectTransform>(), 20f, -482f, 980f, 2f);
+            descDividerGo.AddComponent<Image>().color = new Color(0.85f, 0.88f, 0.90f, 0.22f);
+
+            var descTxtGo = CreateUIObject("SettingDescriptionText", rightPanelGo.transform);
+            SetTopLeft(descTxtGo.GetComponent<RectTransform>(), 28f, -500f, 964f, 175f);
+            var descTmp = CreateTMP(descTxtGo, fontType,
+                "Adjust overall room & monitor brightness so the shrine silhouette is barely visible.",
+                20f, new Color(0.75f, 0.82f, 0.85f, 0.92f), TextAlignmentOptions.TopLeft);
+            var descTypewriter = descTxtGo.AddComponent<TypewriterText>();
+            SetSerializedField(descTypewriter, "targetText", descTmp);
+            SetSerializedField(descTypewriter, "charDelay", 0.01f);
+
             SetSerializedField(settingsMgr, "breadcrumbText", bcTmp);
             SetSerializedField(settingsMgr, "header3DText", optExtrude);
+            SetSerializedField(settingsMgr, "descriptionTypewriter", descTypewriter);
             SetSerializedField(settingsMgr, "categoryList", catListComp);
             SetSerializedList(settingsMgr, "rows", rowsList);
+            SetSerializedField(settingsMgr, "backButton", backBtn);
             SetSerializedField(settingsMgr, "staticController", staticCtrl);
             SetSerializedField(settingsMgr, "shrineCalibrationBox", calibBoxGo);
             SetSerializedField(settingsMgr, "shrineSilhouetteImage", shrineImg);
@@ -716,25 +726,24 @@ namespace SecurityCenter.MainMenu.Editor
             scrollRt.anchoredPosition = new Vector2(0f, 480f);
             scrollRt.sizeDelta = new Vector2(920f, 640f);
 
-            // Ref 2 White Banner Strip ("SECURITY CENTER // NIGHT SHIFT TEAM")
             var bannerGo = CreateUIObject("Credits_Banner", scrollGo.transform);
             SetTopLeft(bannerGo.GetComponent<RectTransform>(), 120f, -10f, 680f, 44f);
             bannerGo.AddComponent<Image>().color = new Color(0.94f, 0.94f, 0.92f, 1f);
             var bTxtGo = CreateUIObject("BannerText", bannerGo.transform);
             StretchFull(bTxtGo.GetComponent<RectTransform>(), 0f);
-            var bTmp = CreateTMP(bTxtGo, fontType, "SECURITY CENTER  //  NIGHT SHIFT LOG", 24f, new Color(0.05f, 0.05f, 0.05f, 1f), TextAlignmentOptions.Center);
+            var bTmp = CreateTMP(bTxtGo, fontType, "JOB HAUNTER  //  SECURITY LOG", 24f, new Color(0.05f, 0.05f, 0.05f, 1f), TextAlignmentOptions.Center);
             bTmp.characterSpacing = 12f;
 
             var bodyGo = CreateUIObject("Credits_Body", scrollGo.transform);
             SetTopLeft(bodyGo.GetComponent<RectTransform>(), 60f, -80f, 800f, 520f);
             string creditsBody =
                 "CORE GAME DESIGN & DIRECTION\n" +
-                "Security Center Development Team\n\n" +
-                "SYSTEMS & TERMINAL UI (SEC-OS v1.0)\n" +
-                "• Cyber-Scam Inspection Terminal (GMAIL & WEBSITE)\n" +
-                "• Midnight Ghost Phone System\n" +
-                "• Shrine Ward & 7-Second Prayer Mechanic\n\n" +
-                "— 06:00 AM : SHIFT COMPLETE —";
+                "Job Haunter Development Team\n\n" +
+                "SYSTEMS & TERMINAL UI\n" +
+                "- Cyber-Scam Inspection Terminal (GMAIL & WEBSITE)\n" +
+                "- Midnight Ghost Phone System\n" +
+                "- Shrine Ward, 7-Second Prayer & Sanity Mechanic\n\n" +
+                "-- 06:00 AM : NIGHT COMPLETE --";
             CreateTMP(bodyGo, fontType, creditsBody, 24f, new Color(0.90f, 0.90f, 0.88f, 0.95f), TextAlignmentOptions.Top);
 
             return panel;
@@ -792,7 +801,7 @@ namespace SecurityCenter.MainMenu.Editor
 
             var ghostSrc = sysGo.AddComponent<AudioSource>();
             ghostSrc.playOnAwake = false;
-            ghostSrc.panStereo = -0.55f; // left speaker for distant phone ring
+            ghostSrc.panStereo = -0.55f;
 
             SetSerializedField(audioMgr, "humLoopSource", humSrc);
             SetSerializedField(audioMgr, "musicLoopSource", musSrc);
@@ -805,19 +814,24 @@ namespace SecurityCenter.MainMenu.Editor
                 "ui_deny", "ui_value_tick", "typewriter_key", "typewriter_ding",
                 "glitch_burst", "phone_ring_far"
             };
-            var namedList = new List<NamedAudioClip>();
-            foreach (var k in clipKeys)
+
+            var so = new SerializedObject(audioMgr);
+            var clipsProp = so.FindProperty("clips");
+            if (clipsProp != null)
             {
-                var c = AssetDatabase.LoadAssetAtPath<AudioClip>($"{BaseDir}/Audio/{k}.wav");
-                namedList.Add(new NamedAudioClip
+                clipsProp.arraySize = clipKeys.Length;
+                for (int i = 0; i < clipKeys.Length; i++)
                 {
-                    key = k,
-                    clip = c,
-                    defaultVolume = k == "typewriter_key" ? 0.35f : 0.75f,
-                    isGhostChannel = (k == "phone_ring_far")
-                });
+                    string k = clipKeys[i];
+                    var c = AssetDatabase.LoadAssetAtPath<AudioClip>($"{BaseDir}/Audio/{k}.wav");
+                    var elem = clipsProp.GetArrayElementAtIndex(i);
+                    elem.FindPropertyRelative("key").stringValue = k;
+                    elem.FindPropertyRelative("clip").objectReferenceValue = c;
+                    elem.FindPropertyRelative("defaultVolume").floatValue = (k == "typewriter_key") ? 0.35f : 0.75f;
+                    elem.FindPropertyRelative("isGhostChannel").boolValue = (k == "phone_ring_far");
+                }
+                so.ApplyModifiedPropertiesWithoutUndo();
             }
-            SetSerializedList(audioMgr, "clips", namedList);
         }
 
         private static Canvas CreateScreenCanvas(string name, int sortOrder)
@@ -926,15 +940,20 @@ namespace SecurityCenter.MainMenu.Editor
             }
         }
 
-        private static void SetSerializedList<T>(Object target, string fieldName, List<T> list) where T : class
+        private static void SetSerializedList<T>(Object target, string fieldName, List<T> list) where T : Object
         {
-            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public;
-            var field = target.GetType().GetField(fieldName, flags);
-            if (field != null)
+            var so = new SerializedObject(target);
+            var prop = so.FindProperty(fieldName);
+            if (prop != null && prop.isArray)
             {
-                field.SetValue(target, list);
-                EditorUtility.SetDirty(target);
+                prop.arraySize = list.Count;
+                for (int i = 0; i < list.Count; i++)
+                {
+                    prop.GetArrayElementAtIndex(i).objectReferenceValue = list[i];
+                }
+                so.ApplyModifiedPropertiesWithoutUndo();
             }
+            EditorUtility.SetDirty(target);
         }
     }
 }

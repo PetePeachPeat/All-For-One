@@ -1,54 +1,44 @@
 using System;
 using System.Collections.Generic;
-using TMPro;
 using UnityEngine;
-using UnityEngine.EventSystems;
 
 namespace SecurityCenter.MainMenu
 {
-    public class SettingsCategoryButton : MonoBehaviour, IPointerEnterHandler, IPointerClickHandler
-    {
-        public int categoryIndex;
-        public RectTransform rectTransform;
-        public TMP_Text labelText;
-        public Action<int> OnCategoryClicked;
-
-        public void SetSelected(bool selected)
-        {
-            if (labelText != null)
-            {
-                labelText.color = selected
-                    ? new Color(0.96f, 0.96f, 0.94f, 1f)
-                    : new Color(0.45f, 0.48f, 0.50f, 0.55f);
-            }
-            if (rectTransform != null)
-            {
-                Vector2 pos = rectTransform.anchoredPosition;
-                pos.x = selected ? -16f : 0f;
-                rectTransform.anchoredPosition = pos;
-            }
-        }
-
-        public void OnPointerEnter(PointerEventData eventData)
-        {
-            if (MenuAudioManager.Instance != null) MenuAudioManager.Instance.Play("ui_hover_tick", 0.04f);
-        }
-
-        public void OnPointerClick(PointerEventData eventData)
-        {
-            if (eventData.button == PointerEventData.InputButton.Left)
-                OnCategoryClicked?.Invoke(categoryIndex);
-        }
-    }
-
     public class SettingsCategoryList : MonoBehaviour
     {
         [SerializeField] private List<SettingsCategoryButton> categoryButtons = new List<SettingsCategoryButton>();
 
         public Action<int> OnCategorySelected;
 
+        private void Awake()
+        {
+            EnsureCategoryButtonsPopulated();
+        }
+
+        private void EnsureCategoryButtonsPopulated()
+        {
+            bool needsRebuild = categoryButtons == null || categoryButtons.Count == 0;
+            if (!needsRebuild)
+            {
+                for (int i = 0; i < categoryButtons.Count; i++)
+                {
+                    if (categoryButtons[i] == null)
+                    {
+                        needsRebuild = true;
+                        break;
+                    }
+                }
+            }
+
+            if (needsRebuild)
+            {
+                categoryButtons = new List<SettingsCategoryButton>(GetComponentsInChildren<SettingsCategoryButton>(true));
+            }
+        }
+
         public void BindCategories(Action<int> callback)
         {
+            EnsureCategoryButtonsPopulated();
             OnCategorySelected = callback;
             for (int i = 0; i < categoryButtons.Count; i++)
             {
@@ -63,6 +53,7 @@ namespace SecurityCenter.MainMenu
 
         public void SelectCategory(int index)
         {
+            EnsureCategoryButtonsPopulated();
             for (int i = 0; i < categoryButtons.Count; i++)
             {
                 if (categoryButtons[i] != null)

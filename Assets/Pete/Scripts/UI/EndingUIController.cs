@@ -91,11 +91,15 @@ namespace Pete.UI
             if (endingTitleText != null) endingTitleText.text = title;
             if (endingDescriptionText != null) endingDescriptionText.text = desc;
 
-            // แสดงสรุปผลสถิติ
             if (statsSummaryText != null && ScoreManager.Instance != null)
             {
                 var sm = ScoreManager.Instance;
-                statsSummaryText.text = 
+                int finalSanity = SanityManager.Instance != null
+                    ? Mathf.RoundToInt(SanityManager.Instance.CurrentSanity)
+                    : 100;
+
+                statsSummaryText.text =
+                    $"Final Sanity: {finalSanity}%\n" +
                     $"Total Score: {sm.NetScore}\n" +
                     $"Legit Jobs Accepted: {sm.LegitJobsAccepted}\n" +
                     $"Scams Rejected: {sm.ScamsRejected}\n" +
@@ -107,13 +111,14 @@ namespace Pete.UI
 
         public void RestartGame()
         {
+            Time.timeScale = 1f;
             SceneManager.LoadScene(SceneManager.GetActiveScene().name);
         }
 
         public void ReturnToMainMenu()
         {
-            // สามารถเปลี่ยนไปซีนเมนูหลัก หรือรีสตาร์ตซีนได้ตามต้องการ
-            SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+            Time.timeScale = 1f;
+            SceneManager.LoadScene("Main menu");
         }
     }
 }

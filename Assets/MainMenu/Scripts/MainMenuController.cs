@@ -1,22 +1,22 @@
-using System;
 using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
-using UnityEngine.UI;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 namespace SecurityCenter.MainMenu
 {
-    public enum MenuScreenState
+    public enum MenuState
     {
-        Boot,
-        Main,
-        GameMode,
+        BootScreen,
+        MainMenu,
+        GameModeSelect,
         Settings,
         Credits,
-        ConfirmModal,
+        ConfirmQuit,
         Transitioning
     }
 
@@ -28,7 +28,7 @@ namespace SecurityCenter.MainMenu
         [SerializeField] private bool inSceneOverlayMode = false;
         [SerializeField] private List<GameObject> overlayCanvasObjects = new List<GameObject>();
 
-        [Header("Screen Panels")]
+        [Header("Panels")]
         [SerializeField] private GameObject panelBoot;
         [SerializeField] private GameObject panelMain;
         [SerializeField] private GameObject panelGameMode;
@@ -37,7 +37,7 @@ namespace SecurityCenter.MainMenu
         [SerializeField] private GameObject modalConfirm;
         [SerializeField] private GameObject titleBlockRoot;
 
-        [Header("Boot Elements")]
+        [Header("Boot Screen")]
         [SerializeField] private RectTransform bootPlayIconRect;
         [SerializeField] private CanvasGroup bootCanvasGroup;
         [SerializeField] private TMP_Text bootPressKeyText;
@@ -46,19 +46,19 @@ namespace SecurityCenter.MainMenu
         [SerializeField] private GlitchText titleGlitch;
         [SerializeField] private Extrude3DText titleExtrude;
         [SerializeField] private TypewriterText stampTypewriter;
-        [SerializeField] private string stampFullText = "NIGHT SHIFT";
+        [SerializeField] private string stampFullText = "";
 
-        [Header("Main Menu List")]
+        [Header("Main Menu Items (3 Buttons: Find Job, Settings, Quit)")]
         [SerializeField] private List<MenuItemFX> mainItems = new List<MenuItemFX>();
         [SerializeField] private TypewriterText mainDescTypewriter;
         [SerializeField] private RectTransform mainDescRect;
 
-        [Header("Game Mode List")]
+        [Header("Game Mode Items")]
         [SerializeField] private List<MenuItemFX> gameModeItems = new List<MenuItemFX>();
         [SerializeField] private TypewriterText gameModeDescTypewriter;
         [SerializeField] private RectTransform gameModeDescRect;
 
-        [Header("Confirm Modal")]
+        [Header("Confirm Modal Items")]
         [SerializeField] private TMP_Text confirmPromptText;
         [SerializeField] private List<MenuItemFX> confirmItems = new List<MenuItemFX>();
 
@@ -72,536 +72,538 @@ namespace SecurityCenter.MainMenu
         [SerializeField] private AmbientEasterEggs easterEggs;
         [SerializeField] private TMP_Text bottomHintText;
 
-        private MenuScreenState _state = MenuScreenState.Boot;
-        private int _mainIndex = 1;
-        private int _modeIndex = 1;
-        private int _confirmIndex = 0;
-        private Action _confirmYesAction;
-        private float _bootBlinkTimer;
-        private bool _hasSave;
-        private static bool _hasSeenBootThisSession;
+        private MenuState _state = MenuState.BootScreen;
+        private int _mainSelectedIndex = 0;
+        private int _modeSelectedIndex = 1;
+        private int _confirmSelectedIndex = 0;
+        private bool _confirmIsOverwrite = false;
+        private bool _hasSave = false;
+
+        private static readonly string[] ThreeButtonDescriptions =
+        {
+            "Clock in at 00:00 AM. Check emails, inspect websites, answer calls, and survive until 06:00 AM.",
+            "Configure video brightness, CRT scanlines, audio levels, and camera rotation sensitivity.",
+            "Power down the terminal and exit Job Haunter."
+        };
+
+        private static readonly string[] FiveButtonDescriptions =
+        {
+            "Resume your current night shift from the last recorded hour.",
+            "Clock in at 00:00 AM. Inspect emails, answer the phone, and survive until 06:00 AM.",
+            "Configure video, audio, camera rotation sensitivity, and accessibility.",
+            "View the development team and system logs.",
+            "Leave the desk and power down the terminal."
+        };
+
+        private static readonly string[] GameModeDescriptions =
+        {
+            "CASUAL SHIFT: Slower clock, 10-second shrine prayer window, clearer scam indicators.",
+            "STANDARD SHIFT: Balanced 00:00-06:00 pacing. 7-second shrine countdown and standard phishing tricks.",
+            "INSANITY SHIFT: Aggressive ghost calls, 4.5-second shrine window, subtle URL spoofing, heavier static."
+        };
 
         private void Start()
         {
-            if (inSceneOverlayMode) Time.timeScale = 0f;
+            Time.timeScale = inSceneOverlayMode ? 0f : 1f;
             _hasSave = PlayerPrefs.GetInt(saveKey, 0) == 1;
-            if (titleExtrude != null) titleExtrude.RebuildExtrudeLayers();
-
-            SetupMainItems();
-            SetupGameModeItems();
-            SetupConfirmItems();
-
-            if (_hasSeenBootThisSession)
-            {
-                EnterMainScreenDirect();
-            }
-            else
-            {
-                EnterBootScreen();
-            }
-        }
-
-        private void OnDisable()
-        {
-            if (inSceneOverlayMode) Time.timeScale = 1f;
-        }
-
-        private void SetupMainItems()
-        {
-            if (mainItems.Count < 5) return;
-
-            mainItems[0].Setup(0, "Continue", "", false, _hasSave);
-            mainItems[1].Setup(1, "New Shift", "", false, true);
-            mainItems[2].Setup(2, "Settings", "", false, true);
-            mainItems[3].Setup(3, "Credits", "", false, true);
-            mainItems[4].Setup(4, "Quit", "", true, true);
 
             for (int i = 0; i < mainItems.Count; i++)
             {
+                if (mainItems[i] == null) continue;
+                mainItems[i].ItemIndex = i;
                 mainItems[i].OnHovered = OnMainItemHovered;
                 mainItems[i].OnClicked = OnMainItemClicked;
             }
-        }
 
-        private void SetupGameModeItems()
-        {
-            if (gameModeItems.Count < 3) return;
-
-            gameModeItems[0].Setup(0, "Casual", "", false, true);
-            gameModeItems[1].Setup(1, "Standard", "", false, true);
-            gameModeItems[2].Setup(2, "Insanity", "", true, true);
+            if (mainItems.Count == 3)
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    if (mainItems[i] != null) mainItems[i].Interactable = true;
+                }
+                _mainSelectedIndex = 0;
+            }
+            else if (mainItems.Count >= 5)
+            {
+                if (mainItems[0] != null) mainItems[0].Interactable = _hasSave;
+                _mainSelectedIndex = _hasSave ? 0 : 1;
+            }
 
             for (int i = 0; i < gameModeItems.Count; i++)
             {
-                gameModeItems[i].OnHovered = OnGameModeHovered;
-                gameModeItems[i].OnClicked = OnGameModeClicked;
+                if (gameModeItems[i] == null) continue;
+                gameModeItems[i].ItemIndex = i;
+                gameModeItems[i].OnHovered = OnModeItemHovered;
+                gameModeItems[i].OnClicked = OnModeItemClicked;
             }
-        }
-
-        private void SetupConfirmItems()
-        {
-            if (confirmItems.Count < 2) return;
-            confirmItems[0].Setup(0, "Stay", "", false, true);
-            confirmItems[1].Setup(1, "Quit", "", true, true);
 
             for (int i = 0; i < confirmItems.Count; i++)
             {
-                confirmItems[i].OnHovered = idx => SelectConfirmIndex(idx, true);
-                confirmItems[i].OnClicked = idx =>
-                {
-                    SelectConfirmIndex(idx, false);
-                    ExecuteConfirmChoice();
-                };
+                if (confirmItems[i] == null) continue;
+                confirmItems[i].ItemIndex = i;
+                confirmItems[i].OnHovered = OnConfirmItemHovered;
+                confirmItems[i].OnClicked = OnConfirmItemClicked;
             }
+
+            if (settingsManager != null)
+            {
+                settingsManager.OnBackRequested = ReturnToMainMenu;
+            }
+
+            EnterMainMenu(playBootBurst: false);
         }
 
-        // =====================================================================
-        // BOOT & INTRO SEQUENCE
-        // =====================================================================
         private void EnterBootScreen()
         {
-            _state = MenuScreenState.Boot;
-            ShowOnlyPanel(panelBoot, false);
-
-            if (staticController != null)
-                staticController.SetIntensityImmediate(0.96f);
-
+            _state = MenuState.BootScreen;
+            SetActivePanels(boot: true, main: false, mode: false, settings: false, credits: false, confirm: false, titleVisible: true);
             if (bottomHintText != null)
-                bottomHintText.text = "[ANY KEY / CLICK] START SYSTEM";
-
-            if (powerTransition != null)
-                powerTransition.PlayPowerOn();
+                bottomHintText.text = "[ PRESS ANY KEY OR CLICK TO ACCESS TERMINAL ]";
         }
 
-        private void EnterMainScreenDirect()
+        private void EnterMainMenu(bool playBootBurst)
         {
-            _state = MenuScreenState.Main;
-            ShowOnlyPanel(panelMain, true);
-            if (staticController != null)
-                staticController.TweenIntensity(0.08f, 0.35f);
-            if (stampTypewriter != null)
-                stampTypewriter.PlayText(stampFullText, 0.028f);
+            _state = MenuState.MainMenu;
+            SetActivePanels(boot: false, main: true, mode: false, settings: false, credits: false, confirm: false, titleVisible: true);
 
-            _mainIndex = _hasSave ? 0 : 1;
-            SelectMainIndex(_mainIndex, false);
-            UpdateBottomHintForMain();
-        }
+            if (easterEggs != null) easterEggs.enabled = true;
+            if (bottomHintText != null)
+                bottomHintText.text = "[W/S] NAVIGATE    [ENTER / CLICK] SELECT    [ESC] QUIT";
 
-        private IEnumerator TransitionBootToMainRoutine()
-        {
-            _state = MenuScreenState.Transitioning;
-            _hasSeenBootThisSession = true;
-
-            if (MenuAudioManager.Instance != null)
-                MenuAudioManager.Instance.Play("ui_select", 0.02f);
-
-            // Zoom ▶ icon out + fade boot screen while static drops 1.0 -> 0.08
-            if (staticController != null)
-                staticController.TweenIntensity(0.08f, 0.55f);
-
-            float dur = 0.38f;
-            float t = 0f;
-            while (t < dur)
+            if (playBootBurst)
             {
-                t += Time.unscaledDeltaTime;
-                float p = Mathf.Clamp01(t / dur);
-                if (bootPlayIconRect != null)
-                    bootPlayIconRect.localScale = Vector3.one * Mathf.Lerp(1f, 1.45f, p);
-                if (bootCanvasGroup != null)
-                    bootCanvasGroup.alpha = 1f - p;
-                yield return null;
+                if (MenuAudioManager.Instance != null)
+                {
+                    MenuAudioManager.Instance.Play("crt_on");
+                    MenuAudioManager.Instance.ApplyVolumesFromPrefs();
+                }
+                if (staticController != null) staticController.PulseBurst(0.55f, 0.28f);
+                if (titleGlitch != null) titleGlitch.TriggerBurst(0.24f, true);
+                if (stampTypewriter != null) stampTypewriter.PlayText(stampFullText);
+            }
+            else
+            {
+                if (MenuAudioManager.Instance != null)
+                    MenuAudioManager.Instance.ApplyVolumesFromPrefs();
             }
 
-            ShowOnlyPanel(panelMain, true);
-            if (titleGlitch != null)
-                titleGlitch.TriggerIntroGlitchIn();
-            if (stampTypewriter != null)
-                stampTypewriter.PlayText(stampFullText, 0.032f);
-
-            _mainIndex = _hasSave ? 0 : 1;
-            SelectMainIndex(_mainIndex, false);
-            UpdateBottomHintForMain();
-            _state = MenuScreenState.Main;
+            SelectMainItem(_mainSelectedIndex, playSfx: false);
         }
 
-        // =====================================================================
-        // UPDATE & INPUT HANDLING (New Input System)
-        // =====================================================================
         private void Update()
         {
-            var kb = Keyboard.current;
-            var mouse = Mouse.current;
-
-            if (kb != null && kb.anyKey.wasPressedThisFrame && easterEggs != null)
-                easterEggs.NotifyUserInput();
-
-            if (_state == MenuScreenState.Boot)
-            {
-                _bootBlinkTimer += Time.unscaledDeltaTime;
-                if (bootPressKeyText != null)
-                {
-                    float a = Mathf.Lerp(0.28f, 1f, 0.5f + 0.5f * Mathf.Sin(_bootBlinkTimer * 3.2f));
-                    Color c = bootPressKeyText.color;
-                    c.a = a;
-                    bootPressKeyText.color = c;
-                }
-
-                bool anyPressed = (kb != null && kb.anyKey.wasPressedThisFrame) ||
-                                  (mouse != null && (mouse.leftButton.wasPressedThisFrame || mouse.rightButton.wasPressedThisFrame));
-                if (anyPressed)
-                {
-                    StartCoroutine(TransitionBootToMainRoutine());
-                }
-                return;
-            }
-
-            if (_state == MenuScreenState.Transitioning) return;
-
-            bool up = kb != null && (kb.upArrowKey.wasPressedThisFrame || kb.wKey.wasPressedThisFrame);
-            bool down = kb != null && (kb.downArrowKey.wasPressedThisFrame || kb.sKey.wasPressedThisFrame);
-            bool left = kb != null && (kb.leftArrowKey.wasPressedThisFrame || kb.aKey.wasPressedThisFrame);
-            bool right = kb != null && (kb.rightArrowKey.wasPressedThisFrame || kb.dKey.wasPressedThisFrame);
-            bool submit = kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame || kb.spaceKey.wasPressedThisFrame);
-            bool back = (kb != null && (kb.escapeKey.wasPressedThisFrame || kb.backspaceKey.wasPressedThisFrame)) ||
-                        (mouse != null && mouse.rightButton.wasPressedThisFrame && PlayerPrefs.GetInt("MM_RightClickBack", 1) == 1);
-            bool resetKey = kb != null && kb.rKey.wasPressedThisFrame;
+            if (_state == MenuState.Transitioning) return;
 
             switch (_state)
             {
-                case MenuScreenState.Main:
-                    if (up) SelectMainIndex((_mainIndex - 1 + mainItems.Count) % mainItems.Count, true);
-                    else if (down) SelectMainIndex((_mainIndex + 1) % mainItems.Count, true);
-                    else if (submit) OnMainItemClicked(_mainIndex);
+                case MenuState.BootScreen:
+                    UpdateBootScreen();
                     break;
-
-                case MenuScreenState.GameMode:
-                    if (up) SelectGameModeIndex((_modeIndex - 1 + gameModeItems.Count) % gameModeItems.Count, true);
-                    else if (down) SelectGameModeIndex((_modeIndex + 1) % gameModeItems.Count, true);
-                    else if (submit) OnGameModeClicked(_modeIndex);
-                    else if (back) ReturnToMainMenu();
+                case MenuState.MainMenu:
+                    UpdateMainMenu();
                     break;
-
-                case MenuScreenState.Settings:
-                    if (settingsManager != null)
-                    {
-                        if (up) settingsManager.StepRowSelection(-1);
-                        else if (down) settingsManager.StepRowSelection(1);
-                        else if (left) settingsManager.StepCurrentRow(-1);
-                        else if (right) settingsManager.StepCurrentRow(1);
-                        else if (kb != null && kb.qKey.wasPressedThisFrame) settingsManager.StepCategory(-1);
-                        else if (kb != null && kb.eKey.wasPressedThisFrame) settingsManager.StepCategory(1);
-                        else if (resetKey) settingsManager.ResetAllToDefaults();
-                    }
-                    if (back)
-                    {
-                        PlayerPrefs.Save();
-                        ReturnToMainMenu();
-                    }
+                case MenuState.GameModeSelect:
+                    UpdateGameModeSelect();
                     break;
-
-                case MenuScreenState.Credits:
-                    if (creditsScrollRect != null)
-                    {
-                        Vector2 pos = creditsScrollRect.anchoredPosition;
-                        pos.y += Time.unscaledDeltaTime * 42f;
-                        if (pos.y > 680f)
-                        {
-                            ReturnToMainMenu();
-                            return;
-                        }
-                        creditsScrollRect.anchoredPosition = pos;
-                    }
-                    if (back || submit) ReturnToMainMenu();
+                case MenuState.Credits:
+                    UpdateCredits();
                     break;
-
-                case MenuScreenState.ConfirmModal:
-                    if (left || up) SelectConfirmIndex(0, true);
-                    else if (right || down) SelectConfirmIndex(1, true);
-                    else if (submit) ExecuteConfirmChoice();
-                    else if (back) CloseConfirmModal();
+                case MenuState.ConfirmQuit:
+                    UpdateConfirmModal();
                     break;
             }
         }
 
-        // =====================================================================
-        // MAIN MENU ACTIONS
-        // =====================================================================
-        private void OnMainItemHovered(int index)
+        private void UpdateBootScreen()
         {
-            if (_state != MenuScreenState.Main) return;
-            if (index != _mainIndex)
-                SelectMainIndex(index, true);
+            float pulse = 1f + Mathf.Sin(Time.unscaledTime * 2.8f) * 0.055f;
+            if (bootPlayIconRect != null)
+                bootPlayIconRect.localScale = new Vector3(pulse, pulse, 1f);
+
+            if (bootPressKeyText != null)
+            {
+                Color c = bootPressKeyText.color;
+                c.a = 0.45f + Mathf.PingPong(Time.unscaledTime * 1.1f, 0.55f);
+                bootPressKeyText.color = c;
+            }
+
+            if (AnyKeyOrClickPressed())
+            {
+                EnterMainMenu(playBootBurst: true);
+            }
         }
 
-        private void SelectMainIndex(int index, bool playTick)
+        private void UpdateMainMenu()
         {
-            _mainIndex = Mathf.Clamp(index, 0, mainItems.Count - 1);
-            if (playTick && MenuAudioManager.Instance != null)
-                MenuAudioManager.Instance.Play("ui_hover_tick", 0.04f);
+            if (WasPressed(Key.W) || WasPressed(Key.UpArrow))
+            {
+                StepMainSelection(-1);
+            }
+            else if (WasPressed(Key.S) || WasPressed(Key.DownArrow))
+            {
+                StepMainSelection(1);
+            }
+            else if (WasPressed(Key.Enter) || WasPressed(Key.Space))
+            {
+                ExecuteMainSelection(_mainSelectedIndex);
+            }
+            else if (WasPressed(Key.Escape))
+            {
+                OpenConfirmQuit();
+            }
+        }
 
+        private void StepMainSelection(int dir)
+        {
+            int count = mainItems.Count;
+            if (count == 0) return;
+
+            int next = _mainSelectedIndex;
+            for (int attempt = 0; attempt < count; attempt++)
+            {
+                next = (next + dir + count) % count;
+                if (mainItems[next] != null && mainItems[next].Interactable)
+                    break;
+            }
+            SelectMainItem(next, playSfx: true);
+        }
+
+        private void SelectMainItem(int index, bool playSfx)
+        {
+            if (mainItems.Count == 0) return;
+            _mainSelectedIndex = Mathf.Clamp(index, 0, mainItems.Count - 1);
             for (int i = 0; i < mainItems.Count; i++)
-                mainItems[i].SetSelected(i == _mainIndex);
+            {
+                if (mainItems[i] != null)
+                    mainItems[i].SetSelected(i == _mainSelectedIndex, playSfx && i == _mainSelectedIndex);
+            }
 
-            var item = mainItems[_mainIndex];
-            if (titleGlitch != null)
-                titleGlitch.SetDangerMode(item.IsDanger);
+            string[] descs = (mainItems.Count <= 3) ? ThreeButtonDescriptions : FiveButtonDescriptions;
+            if (mainDescTypewriter != null && _mainSelectedIndex < descs.Length)
+            {
+                if (mainDescRect != null && mainItems[_mainSelectedIndex] != null)
+                {
+                    var itemRt = mainItems[_mainSelectedIndex].transform as RectTransform;
+                    if (itemRt != null)
+                    {
+                        Vector2 p = mainDescRect.anchoredPosition;
+                        p.y = itemRt.anchoredPosition.y;
+                        mainDescRect.anchoredPosition = p;
+                    }
+                }
+                mainDescTypewriter.PlayText(descs[_mainSelectedIndex]);
+            }
+        }
 
-            if (mainDescTypewriter != null)
-                mainDescTypewriter.PlayText(item.DescriptionText, 0.015f);
+        private void OnMainItemHovered(int index)
+        {
+            if (_state != MenuState.MainMenu) return;
+            if (index != _mainSelectedIndex)
+                SelectMainItem(index, playSfx: true);
         }
 
         private void OnMainItemClicked(int index)
         {
-            if (_state != MenuScreenState.Main) return;
-            SelectMainIndex(index, false);
+            if (_state != MenuState.MainMenu) return;
+            SelectMainItem(index, playSfx: false);
+            ExecuteMainSelection(index);
+        }
 
-            var item = mainItems[index];
-            if (!item.Interactable)
+        private void ExecuteMainSelection(int index)
+        {
+            if (index < 0 || index >= mainItems.Count || mainItems[index] == null) return;
+            if (!mainItems[index].Interactable)
             {
-                if (MenuAudioManager.Instance != null)
-                    MenuAudioManager.Instance.Play("ui_deny", 0.02f);
-                if (staticController != null)
-                    staticController.PulseBurst(0.22f, 0.14f);
+                if (MenuAudioManager.Instance != null) MenuAudioManager.Instance.Play("ui_deny");
                 return;
             }
 
-            if (MenuAudioManager.Instance != null)
-                MenuAudioManager.Instance.Play("ui_select", 0.02f);
-            if (staticController != null)
-                staticController.PulseBurst(0.24f, 0.16f);
-            if (titleGlitch != null)
-                titleGlitch.TriggerBurst(0.18f, false);
+            mainItems[index].PlayPressFlash(null);
+            if (MenuAudioManager.Instance != null) MenuAudioManager.Instance.Play("ui_select", 0.03f);
 
-            item.PlayPressFlash(() =>
+            // 3-Button Layout: 0 = Find Job, 1 = Settings, 2 = Quit
+            if (mainItems.Count <= 3)
             {
                 switch (index)
                 {
-                    case 0: // ทำงานต่อ (Continue)
+                    case 0: // FIND JOB (Start Game)
+                        PlayerPrefs.SetInt(saveKey, 1);
+                        PlayerPrefs.Save();
                         StartGameTransition();
                         break;
-                    case 1: // เริ่มกะใหม่ (New Shift -> Game Mode Select)
-                        OpenGameModeScreen();
+                    case 1: // SETTINGS
+                        OpenSettings();
                         break;
-                    case 2: // ตั้งค่า (Settings)
-                        OpenSettingsScreen();
-                        break;
-                    case 3: // เครดิต (Credits)
-                        OpenCreditsScreen();
-                        break;
-                    case 4: // Quit Confirm
-                        OpenConfirmModal("LEAVE SHIFT BEFORE 06:00 AM? ARE YOU SURE YOU WANT TO QUIT?", QuitApplication);
+                    case 2: // QUIT
+                        OpenConfirmQuit();
                         break;
                 }
-            });
+                return;
+            }
+
+            switch (index)
+            {
+                case 0:
+                    StartGameTransition();
+                    break;
+                case 1:
+                    PlayerPrefs.SetInt(saveKey, 1);
+                    PlayerPrefs.Save();
+                    StartGameTransition();
+                    break;
+                case 2:
+                    OpenSettings();
+                    break;
+                case 3:
+                    OpenCredits();
+                    break;
+                case 4:
+                    OpenConfirmQuit();
+                    break;
+            }
         }
 
-        // =====================================================================
-        // GAME MODE SCREEN (Ref 5)
-        // =====================================================================
-        private void OpenGameModeScreen()
+        private void OpenGameModeSelect()
         {
-            _state = MenuScreenState.GameMode;
-            ShowOnlyPanel(panelGameMode, true);
-            _modeIndex = PlayerPrefs.GetInt("MM_GameMode", 1);
-            SelectGameModeIndex(_modeIndex, false);
+            _state = MenuState.GameModeSelect;
+            if (easterEggs != null) easterEggs.enabled = false;
+            if (staticController != null) staticController.PulseBurst(0.45f, 0.14f);
+            SetActivePanels(boot: false, main: false, mode: true, settings: false, credits: false, confirm: false, titleVisible: true);
             if (bottomHintText != null)
-                bottomHintText.text = "[↑/↓] Scroll    [ENTER / CLICK] Confirm    [ESC / RMB] Back";
+                bottomHintText.text = "[W/S] SELECT DIFFICULTY    [ENTER] START SHIFT    [ESC / RIGHT CLICK] BACK";
+
+            SelectModeItem(_modeSelectedIndex, playSfx: false);
         }
 
-        private void OnGameModeHovered(int idx)
+        private void UpdateGameModeSelect()
         {
-            if (_state != MenuScreenState.GameMode) return;
-            if (idx != _modeIndex) SelectGameModeIndex(idx, true);
+            if (WasPressed(Key.Escape) || WasRightClicked())
+            {
+                if (MenuAudioManager.Instance != null) MenuAudioManager.Instance.Play("ui_back");
+                ReturnToMainMenu();
+                return;
+            }
+
+            if (WasPressed(Key.W) || WasPressed(Key.UpArrow))
+                SelectModeItem((_modeSelectedIndex - 1 + gameModeItems.Count) % gameModeItems.Count, true);
+            else if (WasPressed(Key.S) || WasPressed(Key.DownArrow))
+                SelectModeItem((_modeSelectedIndex + 1) % gameModeItems.Count, true);
+            else if (WasPressed(Key.Enter) || WasPressed(Key.Space))
+                OnModeItemClicked(_modeSelectedIndex);
         }
 
-        private void SelectGameModeIndex(int idx, bool playTick)
+        private void SelectModeItem(int index, bool playSfx)
         {
-            _modeIndex = Mathf.Clamp(idx, 0, gameModeItems.Count - 1);
-            if (playTick && MenuAudioManager.Instance != null)
-                MenuAudioManager.Instance.Play("ui_hover_tick", 0.04f);
-
+            if (gameModeItems.Count == 0) return;
+            _modeSelectedIndex = Mathf.Clamp(index, 0, gameModeItems.Count - 1);
             for (int i = 0; i < gameModeItems.Count; i++)
-                gameModeItems[i].SetSelected(i == _modeIndex);
+            {
+                if (gameModeItems[i] != null)
+                    gameModeItems[i].SetSelected(i == _modeSelectedIndex, playSfx && i == _modeSelectedIndex);
+            }
 
-            var item = gameModeItems[_modeIndex];
-            if (titleGlitch != null)
-                titleGlitch.SetDangerMode(item.IsDanger);
-            if (gameModeDescTypewriter != null)
-                gameModeDescTypewriter.PlayText(item.DescriptionText, 0.015f);
+            if (gameModeDescTypewriter != null && _modeSelectedIndex < GameModeDescriptions.Length)
+            {
+                if (gameModeDescRect != null && gameModeItems[_modeSelectedIndex] != null)
+                {
+                    var itemRt = gameModeItems[_modeSelectedIndex].transform as RectTransform;
+                    if (itemRt != null)
+                    {
+                        Vector2 p = gameModeDescRect.anchoredPosition;
+                        p.y = itemRt.anchoredPosition.y;
+                        gameModeDescRect.anchoredPosition = p;
+                    }
+                }
+                gameModeDescTypewriter.PlayText(GameModeDescriptions[_modeSelectedIndex]);
+            }
         }
 
-        private void OnGameModeClicked(int idx)
+        private void OnModeItemHovered(int index)
         {
-            if (_state != MenuScreenState.GameMode) return;
-            SelectGameModeIndex(idx, false);
-            PlayerPrefs.SetInt("MM_GameMode", idx);
+            if (_state != MenuState.GameModeSelect) return;
+            if (index != _modeSelectedIndex)
+                SelectModeItem(index, true);
+        }
+
+        private void OnModeItemClicked(int index)
+        {
+            if (_state != MenuState.GameModeSelect) return;
+            SelectModeItem(index, false);
+            PlayerPrefs.SetInt("MM_Difficulty", index);
+            PlayerPrefs.SetInt(saveKey, 1);
             PlayerPrefs.Save();
 
-            if (MenuAudioManager.Instance != null)
-                MenuAudioManager.Instance.Play("ui_select", 0.02f);
-
-            gameModeItems[idx].PlayPressFlash(StartGameTransition);
+            if (MenuAudioManager.Instance != null) MenuAudioManager.Instance.Play("ui_select");
+            StartGameTransition();
         }
 
-        // =====================================================================
-        // SETTINGS, CREDITS, CONFIRM MODAL
-        // =====================================================================
-        private void OpenSettingsScreen()
+        private void OpenSettings()
         {
-            _state = MenuScreenState.Settings;
-            ShowOnlyPanel(panelSettings, false);
+            _state = MenuState.Settings;
+            if (easterEggs != null) easterEggs.enabled = false;
+            if (staticController != null) staticController.PulseBurst(0.45f, 0.14f);
+            SetActivePanels(boot: false, main: false, mode: false, settings: true, credits: false, confirm: false, titleVisible: false);
+            if (bottomHintText != null)
+                bottomHintText.text = "[Q/E] CATEGORY   [W/S] ROW   [A/D or CLICK] ADJUST   [ESC / RIGHT CLICK] BACK";
+
             if (settingsManager != null)
                 settingsManager.OpenSettings();
-            if (bottomHintText != null)
-                bottomHintText.text = "[↑/↓] Scroll   [←/→] Adjust   [Q/E] Category   [R] Default   [ESC] Save & Back";
         }
 
-        private void OpenCreditsScreen()
+        private void OpenCredits()
         {
-            _state = MenuScreenState.Credits;
-            ShowOnlyPanel(panelCredits, true);
+            _state = MenuState.Credits;
+            if (easterEggs != null) easterEggs.enabled = false;
+            if (staticController != null) staticController.PulseBurst(0.45f, 0.14f);
+            SetActivePanels(boot: false, main: false, mode: false, settings: false, credits: true, confirm: false, titleVisible: true);
+            if (bottomHintText != null)
+                bottomHintText.text = "[ESC / RIGHT CLICK / ENTER] RETURN TO MAIN MENU";
+
             if (creditsScrollRect != null)
                 creditsScrollRect.anchoredPosition = new Vector2(0f, -260f);
-            if (bottomHintText != null)
-                bottomHintText.text = "[ESC / ENTER / RMB] Return to Main Menu";
         }
 
-        private void OpenConfirmModal(string prompt, Action onYes)
+        private void UpdateCredits()
         {
-            _state = MenuScreenState.ConfirmModal;
-            _confirmYesAction = onYes;
-            if (confirmPromptText != null) confirmPromptText.text = prompt;
-            if (modalConfirm != null) modalConfirm.SetActive(true);
-            SelectConfirmIndex(0, false);
-            if (bottomHintText != null)
-                bottomHintText.text = "[←/→] Select   [ENTER] Confirm   [ESC] Cancel";
-        }
-
-        private void SelectConfirmIndex(int idx, bool playTick)
-        {
-            _confirmIndex = Mathf.Clamp(idx, 0, 1);
-            if (playTick && MenuAudioManager.Instance != null)
-                MenuAudioManager.Instance.Play("ui_hover_tick", 0.04f);
-            for (int i = 0; i < confirmItems.Count; i++)
-                confirmItems[i].SetSelected(i == _confirmIndex);
-        }
-
-        private void ExecuteConfirmChoice()
-        {
-            if (_confirmIndex == 0)
+            if (creditsScrollRect != null)
             {
-                CloseConfirmModal();
+                Vector2 pos = creditsScrollRect.anchoredPosition;
+                pos.y += 38f * Time.unscaledDeltaTime;
+                if (pos.y > 420f) pos.y = -260f;
+                creditsScrollRect.anchoredPosition = pos;
             }
-            else
-            {
-                if (MenuAudioManager.Instance != null)
-                    MenuAudioManager.Instance.Play("ui_select", 0.02f);
-                _confirmYesAction?.Invoke();
-            }
-        }
 
-        private void CloseConfirmModal()
-        {
-            if (MenuAudioManager.Instance != null)
-                MenuAudioManager.Instance.Play("ui_back", 0.02f);
-            if (modalConfirm != null) modalConfirm.SetActive(false);
-            _state = MenuScreenState.Main;
-            UpdateBottomHintForMain();
+            if (WasPressed(Key.Escape) || WasPressed(Key.Enter) || WasPressed(Key.Space) || WasRightClicked())
+            {
+                if (MenuAudioManager.Instance != null) MenuAudioManager.Instance.Play("ui_back");
+                ReturnToMainMenu();
+            }
         }
 
         public void ReturnToMainMenu()
         {
-            if (MenuAudioManager.Instance != null)
-                MenuAudioManager.Instance.Play("ui_back", 0.02f);
-            if (staticController != null)
-                staticController.PulseBurst(0.20f, 0.14f);
-
-            _state = MenuScreenState.Main;
-            ShowOnlyPanel(panelMain, true);
-            SelectMainIndex(_mainIndex, false);
-            UpdateBottomHintForMain();
+            EnterMainMenu(playBootBurst: false);
+            if (staticController != null) staticController.PulseBurst(0.4f, 0.12f);
         }
 
-        private void ShowOnlyPanel(GameObject activePanel, bool showTitleBlock)
+        private void OpenConfirmQuit()
         {
-            if (panelBoot != null) panelBoot.SetActive(activePanel == panelBoot);
-            if (panelMain != null) panelMain.SetActive(activePanel == panelMain);
-            if (panelGameMode != null) panelGameMode.SetActive(activePanel == panelGameMode);
-            if (panelSettings != null) panelSettings.SetActive(activePanel == panelSettings);
-            if (panelCredits != null) panelCredits.SetActive(activePanel == panelCredits);
-            if (modalConfirm != null) modalConfirm.SetActive(false);
-            if (titleBlockRoot != null) titleBlockRoot.SetActive(showTitleBlock);
+            _state = MenuState.ConfirmQuit;
+            _confirmIsOverwrite = false;
+            if (confirmPromptText != null)
+                confirmPromptText.text = "LEAVE SHIFT BEFORE 06:00 AM? ARE YOU SURE YOU WANT TO QUIT?";
+            if (modalConfirm != null) modalConfirm.SetActive(true);
+            SelectConfirmItem(0, false);
         }
 
-        private void UpdateBottomHintForMain()
+        private void UpdateConfirmModal()
         {
-            if (bottomHintText != null)
-                bottomHintText.text = "[W/S or ↑/↓] Scroll     [ENTER / CLICK] Select     [ESC / RMB] Back";
+            if (WasPressed(Key.Escape) || WasRightClicked())
+            {
+                if (MenuAudioManager.Instance != null) MenuAudioManager.Instance.Play("ui_back");
+                if (modalConfirm != null) modalConfirm.SetActive(false);
+                _state = MenuState.MainMenu;
+                return;
+            }
+
+            if (WasPressed(Key.A) || WasPressed(Key.LeftArrow) || WasPressed(Key.W) || WasPressed(Key.UpArrow))
+                SelectConfirmItem(0, true);
+            else if (WasPressed(Key.D) || WasPressed(Key.RightArrow) || WasPressed(Key.S) || WasPressed(Key.DownArrow))
+                SelectConfirmItem(1, true);
+            else if (WasPressed(Key.Enter) || WasPressed(Key.Space))
+                OnConfirmItemClicked(_confirmSelectedIndex);
         }
 
-        // =====================================================================
-        // CRT POWER-OFF TRANSITION INTO GAME SCENE
-        // =====================================================================
+        private void SelectConfirmItem(int idx, bool playSfx)
+        {
+            _confirmSelectedIndex = Mathf.Clamp(idx, 0, Mathf.Max(0, confirmItems.Count - 1));
+            for (int i = 0; i < confirmItems.Count; i++)
+            {
+                if (confirmItems[i] != null)
+                    confirmItems[i].SetSelected(i == _confirmSelectedIndex, playSfx && i == _confirmSelectedIndex);
+            }
+        }
+
+        private void OnConfirmItemHovered(int idx)
+        {
+            if (_state != MenuState.ConfirmQuit) return;
+            if (idx != _confirmSelectedIndex)
+                SelectConfirmItem(idx, true);
+        }
+
+        private void OnConfirmItemClicked(int idx)
+        {
+            if (_state != MenuState.ConfirmQuit) return;
+            SelectConfirmItem(idx, false);
+
+            if (idx == 0) // CANCEL / STAY
+            {
+                if (MenuAudioManager.Instance != null) MenuAudioManager.Instance.Play("ui_back");
+                if (modalConfirm != null) modalConfirm.SetActive(false);
+                _state = MenuState.MainMenu;
+            }
+            else // CONFIRM
+            {
+                if (modalConfirm != null) modalConfirm.SetActive(false);
+                if (_confirmIsOverwrite)
+                {
+                    if (MenuAudioManager.Instance != null) MenuAudioManager.Instance.Play("ui_select");
+                    StartGameTransition();
+                }
+                else
+                {
+                    QuitGameWithCRTCollapse();
+                }
+            }
+        }
+
         private void StartGameTransition()
         {
-            _state = MenuScreenState.Transitioning;
-            StartCoroutine(LoadGameSceneRoutine());
-        }
-
-        private IEnumerator LoadGameSceneRoutine()
-        {
-            if (staticController != null)
-                staticController.TweenIntensity(1.0f, 0.35f);
-
-            yield return new WaitForSecondsRealtime(0.25f);
-
-            bool powerOffFinished = false;
-            if (powerTransition != null)
-            {
-                powerTransition.PlayPowerOff(() => powerOffFinished = true);
-                while (!powerOffFinished) yield return null;
-            }
-            else
-            {
-                yield return new WaitForSecondsRealtime(0.4f);
-            }
+            _state = MenuState.Transitioning;
+            Time.timeScale = 1f;
 
             if (inSceneOverlayMode)
             {
-                foreach (var go in overlayCanvasObjects)
+                if (powerTransition != null)
                 {
-                    if (go != null) go.SetActive(false);
+                    powerTransition.PlayPowerOff(DismissInSceneOverlay);
                 }
-                if (MenuAudioManager.Instance != null)
+                else
                 {
-                    foreach (var src in MenuAudioManager.Instance.GetComponents<AudioSource>())
-                        if (src.loop) src.Stop();
+                    DismissInSceneOverlay();
                 }
-                Time.timeScale = 1f;
-                if (powerTransition != null) powerTransition.PlayPowerOn();
-                gameObject.SetActive(false);
-                yield break;
+                return;
             }
 
-            if (!string.IsNullOrEmpty(gameSceneName) && Application.CanStreamedLevelBeLoaded(gameSceneName))
+            string targetScene = string.IsNullOrEmpty(gameSceneName) ? "test" : gameSceneName;
+            if (powerTransition != null)
             {
-                AsyncOperation op = SceneManager.LoadSceneAsync(gameSceneName);
-                while (op != null && !op.isDone)
-                    yield return null;
+                powerTransition.PlayPowerOff(() =>
+                {
+                    SceneManager.LoadScene(targetScene);
+                });
             }
             else
             {
-                Debug.Log($"[SecurityCenter.MainMenu] CRT Power-Off complete. Ready to load scene '{gameSceneName}' (add '{gameSceneName}' to Build Settings if needed).");
-                // Recover gracefully in Editor preview if scene is not in Build Settings yet
-                yield return new WaitForSecondsRealtime(0.6f);
-                if (powerTransition != null) powerTransition.PlayPowerOn();
-                EnterMainScreenDirect();
+                SceneManager.LoadScene(targetScene);
             }
         }
 
-        private void QuitApplication()
+        private void DismissInSceneOverlay()
         {
-            _state = MenuScreenState.Transitioning;
+            Time.timeScale = 1f;
+            for (int i = 0; i < overlayCanvasObjects.Count; i++)
+            {
+                if (overlayCanvasObjects[i] != null)
+                    overlayCanvasObjects[i].SetActive(false);
+            }
+            gameObject.SetActive(false);
+        }
+
+        private void QuitGameWithCRTCollapse()
+        {
+            _state = MenuState.Transitioning;
+
             if (powerTransition != null)
             {
                 powerTransition.PlayPowerOff(() =>
@@ -621,6 +623,47 @@ namespace SecurityCenter.MainMenu
                 Application.Quit();
 #endif
             }
+        }
+
+        private void SetActivePanels(bool boot, bool main, bool mode, bool settings, bool credits, bool confirm, bool titleVisible)
+        {
+            if (panelBoot != null) panelBoot.SetActive(boot);
+            if (panelMain != null) panelMain.SetActive(main);
+            if (panelGameMode != null) panelGameMode.SetActive(mode);
+            if (panelSettings != null) panelSettings.SetActive(settings);
+            if (panelCredits != null) panelCredits.SetActive(credits);
+            if (modalConfirm != null) modalConfirm.SetActive(confirm);
+            if (titleBlockRoot != null) titleBlockRoot.SetActive(titleVisible);
+        }
+
+        private static bool WasPressed(Key k)
+        {
+#if ENABLE_INPUT_SYSTEM
+            return Keyboard.current != null && Keyboard.current[k].wasPressedThisFrame;
+#else
+            return false;
+#endif
+        }
+
+        private static bool WasRightClicked()
+        {
+#if ENABLE_INPUT_SYSTEM
+            return Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame;
+#else
+            return Input.GetMouseButtonDown(1);
+#endif
+        }
+
+        private static bool AnyKeyOrClickPressed()
+        {
+#if ENABLE_INPUT_SYSTEM
+            bool key = Keyboard.current != null && Keyboard.current.anyKey.wasPressedThisFrame;
+            bool mouse = Mouse.current != null &&
+                         (Mouse.current.leftButton.wasPressedThisFrame || Mouse.current.rightButton.wasPressedThisFrame);
+            return key || mouse;
+#else
+            return Input.anyKeyDown || Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1);
+#endif
         }
     }
 }

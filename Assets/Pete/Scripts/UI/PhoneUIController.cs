@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -13,11 +12,12 @@ namespace Pete.UI
     {
         [Header("UI Panels")]
         [SerializeField] private GameObject phoneMainPanel;
+        [SerializeField] private GameObject idleStandbyPanel;
         [SerializeField] private GameObject ringingPanel;
         [SerializeField] private GameObject inCallPanel;
         [SerializeField] private GameObject decisionPanel;
 
-        [Header("Horror Mode Roots (Screenshots 3 & 4)")]
+        [Header("Horror Mode Roots")]
         [SerializeField] private GameObject normalBackdropLayer;
         [SerializeField] private GameObject horrorRedBackdropLayer;
         [SerializeField] private GameObject ghostEyeballRoot;
@@ -26,6 +26,9 @@ namespace Pete.UI
         [SerializeField] private Image phoneFrameBezelImage;
 
         [Header("Text Displays")]
+        [SerializeField] private TextMeshProUGUI idleClockText;
+        [SerializeField] private TextMeshProUGUI idleSubClockText;
+        [SerializeField] private TextMeshProUGUI ringingClockText;
         [SerializeField] private TextMeshProUGUI callerNameText;
         [SerializeField] private TextMeshProUGUI callerNumberText;
         [SerializeField] private TextMeshProUGUI inCallCallerNameText;
@@ -45,15 +48,6 @@ namespace Pete.UI
         [SerializeField] private Button declineOfferButton;
         [SerializeField] private Button exitPhoneButton;
 
-        [Header("Top Mode Switcher & Replay Buttons (Screenshots 2, 3, 4)")]
-        [SerializeField] private Button modeIncomingButton;
-        [SerializeField] private Button modeFakeCaseButton;
-        [SerializeField] private Button modeRealCaseButton;
-        [SerializeField] private Button modeGhostEyeballButton;
-        [SerializeField] private Button modeGhostScreamButton;
-        [SerializeField] private Button replayEyeballJumpscareButton;
-        [SerializeField] private Button replayScreamJumpscareButton;
-
         [Header("Animated Horror Elements")]
         [SerializeField] private List<RectTransform> eyeballPupils = new List<RectTransform>();
         [SerializeField] private List<RectTransform> screamFloodTexts = new List<RectTransform>();
@@ -61,34 +55,17 @@ namespace Pete.UI
 
         private enum ActivePhoneVisualMode
         {
+            IdleStandby,
             NormalIncoming,
             NormalInCall,
             GhostEyeball,
             GhostScream
         }
 
-        private ActivePhoneVisualMode visualMode = ActivePhoneVisualMode.NormalIncoming;
-        private bool isDemoFakeCase = true;
-        private int demoDialogueIdx = 0;
-        private float localGhostCountdown = 7.0f;
-        private bool localCountdownRunning = false;
+        private ActivePhoneVisualMode visualMode = ActivePhoneVisualMode.IdleStandby;
         private Vector2[] pupilBasePositions;
         private Vector2[] screamBasePositions;
         private Vector2 phoneFrameBasePos;
-
-        private readonly string[] fakeDialogueLines =
-        {
-            "\"สวัสดีครับ ติดต่อจาก สภ.เมือง ฝ่ายสืบสวนคดีฟอกเงิน\"",
-            "\"พบบัญชีของคุณพัวพันคดีสีเทา ต้องโอนเงินทั้งหมดมาตรวจสอบเดี๋ยวนี้!\"",
-            "\"กดยืนยันโอนเงินประกันตัว 15,000฿ หรือจะให้ตำรวจออกหมายจับ?!\""
-        };
-
-        private readonly string[] realDialogueLines =
-        {
-            "\"สวัสดีค่ะ ติดต่อจากฝ่ายบุคคล บจก. SEC-CORP นะคะ\"",
-            "\"ยืนยันตารางเข้ากะดึกของคุณคืนนี้ เวลา 00:00 - 06:00 น. ค่ะ\"",
-            "\"ไม่มีค่าธรรมเนียมใดๆ กดยืนยันรับทราบตารางงานได้เลยค่ะ\""
-        };
 
         private void Start()
         {
@@ -105,21 +82,6 @@ namespace Pete.UI
             if (exitPhoneButton != null)
                 exitPhoneButton.onClick.AddListener(ExitPhone);
 
-            if (modeIncomingButton != null)
-                modeIncomingButton.onClick.AddListener(() => ShowDemoIncomingCall(isDemoFakeCase));
-            if (modeFakeCaseButton != null)
-                modeFakeCaseButton.onClick.AddListener(() => ShowDemoIncomingCall(true));
-            if (modeRealCaseButton != null)
-                modeRealCaseButton.onClick.AddListener(() => ShowDemoIncomingCall(false));
-            if (modeGhostEyeballButton != null)
-                modeGhostEyeballButton.onClick.AddListener(TriggerGhostEyeballMode);
-            if (modeGhostScreamButton != null)
-                modeGhostScreamButton.onClick.AddListener(TriggerGhostScreamMode);
-            if (replayEyeballJumpscareButton != null)
-                replayEyeballJumpscareButton.onClick.AddListener(TriggerGhostEyeballMode);
-            if (replayScreamJumpscareButton != null)
-                replayScreamJumpscareButton.onClick.AddListener(TriggerGhostScreamMode);
-
             CacheAnimationBasePositions();
 
             if (PhoneManager.Instance != null)
@@ -130,7 +92,19 @@ namespace Pete.UI
                 PhoneManager.Instance.OnPhoneCallEnded += OnCallEnded;
             }
 
-            ShowDemoIncomingCall(true);
+            if (GhostManager.Instance != null)
+            {
+                GhostManager.Instance.OnGhostAverted += OnGhostResolved;
+                GhostManager.Instance.OnGhostDebuffApplied += OnGhostDebuffResolved;
+            }
+
+            if (GameTimeManager.Instance != null)
+            {
+                GameTimeManager.Instance.OnTimeChanged += UpdatePhoneClock;
+                UpdatePhoneClock(GameTimeManager.Instance.CurrentHour, GameTimeManager.Instance.CurrentMinute);
+            }
+
+            ShowIdleStandbyScreen();
 
             if (CameraController.Instance != null)
             {
@@ -167,11 +141,15 @@ namespace Pete.UI
             {
                 bool active = (type == InspectTargetType.Phone);
                 phoneMainPanel.SetActive(active);
-                if (active && (PhoneManager.Instance == null || PhoneManager.Instance.CurrentState == PhoneManager.PhoneState.Idle))
+                if (active)
                 {
-                    if (visualMode != ActivePhoneVisualMode.GhostEyeball && visualMode != ActivePhoneVisualMode.GhostScream)
+                    if (GameTimeManager.Instance != null)
+                        UpdatePhoneClock(GameTimeManager.Instance.CurrentHour, GameTimeManager.Instance.CurrentMinute);
+
+                    bool ghostRunning = GhostManager.Instance != null && GhostManager.Instance.IsCountdownActive;
+                    if (!ghostRunning && (PhoneManager.Instance == null || PhoneManager.Instance.CurrentState == PhoneManager.PhoneState.Idle))
                     {
-                        ShowDemoIncomingCall(isDemoFakeCase);
+                        ShowIdleStandbyScreen();
                     }
                 }
             }
@@ -199,6 +177,28 @@ namespace Pete.UI
                 PhoneManager.Instance.OnDialogueAdvanced -= OnDialogueUpdated;
                 PhoneManager.Instance.OnPhoneCallEnded -= OnCallEnded;
             }
+            if (GhostManager.Instance != null)
+            {
+                GhostManager.Instance.OnGhostAverted -= OnGhostResolved;
+                GhostManager.Instance.OnGhostDebuffApplied -= OnGhostDebuffResolved;
+            }
+            if (GameTimeManager.Instance != null)
+            {
+                GameTimeManager.Instance.OnTimeChanged -= UpdatePhoneClock;
+            }
+        }
+
+        private void UpdatePhoneClock(int hour, int minute)
+        {
+            string h12 = GameTimeManager.Instance != null ? GameTimeManager.Instance.GetDisplayHour12H() : "12 AM";
+            string t24 = GameTimeManager.Instance != null ? GameTimeManager.Instance.GetDisplayTime24H() : $"{hour:00}:{minute:00}";
+
+            if (idleClockText != null)
+                idleClockText.text = t24;
+            if (idleSubClockText != null)
+                idleSubClockText.text = $"{h12}  •  NIGHT 1";
+            if (ringingClockText != null)
+                ringingClockText.text = $"{t24} ({h12})";
         }
 
         private void Update()
@@ -210,23 +210,21 @@ namespace Pete.UI
             // Update countdown if in ghost mode
             if (visualMode == ActivePhoneVisualMode.GhostEyeball || visualMode == ActivePhoneVisualMode.GhostScream)
             {
-                float rem = localGhostCountdown;
                 if (GhostManager.Instance != null && GhostManager.Instance.IsCountdownActive)
                 {
-                    rem = GhostManager.Instance.RemainingCountdown;
+                    float rem = GhostManager.Instance.RemainingCountdown;
+                    string timerStr = $"[!] สายผีตัด — รีบไปศาลเจ้าใน: {rem:0.0}s";
+                    if (ghostEyeballCountdownText != null) ghostEyeballCountdownText.text = timerStr;
+                    if (ghostScreamCountdownText != null) ghostScreamCountdownText.text = timerStr;
                 }
-                else if (localCountdownRunning)
+                else
                 {
-                    localGhostCountdown = Mathf.Max(0f, localGhostCountdown - Time.unscaledDeltaTime);
-                    rem = localGhostCountdown;
+                    ShowIdleStandbyScreen();
+                    return;
                 }
-
-                string timerStr = $"[!] สายผีตัด\nใน: {rem:0.0}s";
-                if (ghostEyeballCountdownText != null) ghostEyeballCountdownText.text = timerStr;
-                if (ghostScreamCountdownText != null) ghostScreamCountdownText.text = $"[!] ใน: {rem:0.0}s";
             }
 
-            // Animate roving pupils in GhostEyeball mode (Screenshot 3)
+            // Animate roving pupils in GhostEyeball mode
             if (visualMode == ActivePhoneVisualMode.GhostEyeball && pupilBasePositions != null)
             {
                 for (int i = 0; i < eyeballPupils.Count; i++)
@@ -243,7 +241,7 @@ namespace Pete.UI
                 }
             }
 
-            // Animate chaotic shaking words in GhostScream mode (Screenshot 4)
+            // Animate chaotic shaking words in GhostScream mode
             if (visualMode == ActivePhoneVisualMode.GhostScream && screamBasePositions != null)
             {
                 for (int i = 0; i < screamFloodTexts.Count; i++)
@@ -276,44 +274,37 @@ namespace Pete.UI
             }
         }
 
-        // ==================== DEMO & SCHEDULED CALL MODES ====================
-        public void ShowDemoIncomingCall(bool fakeCase)
+        public void ShowIdleStandbyScreen()
         {
-            isDemoFakeCase = fakeCase;
-            visualMode = ActivePhoneVisualMode.NormalIncoming;
-            localCountdownRunning = false;
-
+            visualMode = ActivePhoneVisualMode.IdleStandby;
             ApplyThemeColors(false);
 
-            if (ringingPanel != null) ringingPanel.SetActive(true);
+            if (phoneScreenBgImage != null)
+                phoneScreenBgImage.color = new Color(0.008f, 0.012f, 0.018f, 1f);
+
+            if (idleStandbyPanel != null) idleStandbyPanel.SetActive(true);
+            if (ringingPanel != null) ringingPanel.SetActive(false);
             if (inCallPanel != null) inCallPanel.SetActive(false);
             if (decisionPanel != null) decisionPanel.SetActive(false);
             if (ghostEyeballRoot != null) ghostEyeballRoot.SetActive(false);
             if (ghostScreamRoot != null) ghostScreamRoot.SetActive(false);
 
-            string cNum = fakeCase ? "098-712-XXXX" : "02-910-8800";
-            string cName = fakeCase ? "\"สภ.เมือง (ฝ่ายสืบสวน)\"" : "\"บจก. SEC-CORP (ฝ่ายบุคคล)\"";
-
-            if (callerNumberText != null) callerNumberText.text = cNum;
-            if (callerNameText != null) callerNameText.text = cName;
-            if (inCallCallerNumberText != null) inCallCallerNumberText.text = cNum;
-            if (inCallCallerNameText != null) inCallCallerNameText.text = cName;
+            if (GameTimeManager.Instance != null)
+                UpdatePhoneClock(GameTimeManager.Instance.CurrentHour, GameTimeManager.Instance.CurrentMinute);
 
             if (bottomStatusBadgeText != null)
             {
-                bottomStatusBadgeText.text = "► กดปุ่มสีเขียวเพื่อรับสาย";
-                bottomStatusBadgeText.color = new Color(0.45f, 0.92f, 0.98f, 1f);
+                bottomStatusBadgeText.text = "● โทรศัพท์สแตนด์บาย (ไม่มีสายเรียกเข้า)";
+                bottomStatusBadgeText.color = new Color(0.52f, 0.68f, 0.74f, 0.9f);
             }
         }
 
         public void TriggerGhostEyeballMode()
         {
             visualMode = ActivePhoneVisualMode.GhostEyeball;
-            localGhostCountdown = 7.0f;
-            localCountdownRunning = true;
-
             ApplyThemeColors(true);
 
+            if (idleStandbyPanel != null) idleStandbyPanel.SetActive(false);
             if (ringingPanel != null) ringingPanel.SetActive(false);
             if (inCallPanel != null) inCallPanel.SetActive(false);
             if (decisionPanel != null) decisionPanel.SetActive(false);
@@ -322,11 +313,11 @@ namespace Pete.UI
 
             if (bottomStatusBadgeText != null)
             {
-                bottomStatusBadgeText.text = "● ลูกตากำลังกลอกมองไปมา...";
-                bottomStatusBadgeText.color = new Color(0.45f, 0.92f, 0.98f, 1f);
+                bottomStatusBadgeText.text = "● ผีพูดขู่! รีบกด A/D หันไปสวดมนต์ที่ศาลเจ้า!";
+                bottomStatusBadgeText.color = new Color(0.98f, 0.35f, 0.35f, 1f);
             }
 
-            if (GhostManager.Instance != null && Application.isPlaying)
+            if (GhostManager.Instance != null && Application.isPlaying && !GhostManager.Instance.IsCountdownActive)
             {
                 GhostManager.Instance.StartGhostCountdown(GhostType.Threat);
             }
@@ -335,11 +326,9 @@ namespace Pete.UI
         public void TriggerGhostScreamMode()
         {
             visualMode = ActivePhoneVisualMode.GhostScream;
-            localGhostCountdown = 7.0f;
-            localCountdownRunning = true;
-
             ApplyThemeColors(true);
 
+            if (idleStandbyPanel != null) idleStandbyPanel.SetActive(false);
             if (ringingPanel != null) ringingPanel.SetActive(false);
             if (inCallPanel != null) inCallPanel.SetActive(false);
             if (decisionPanel != null) decisionPanel.SetActive(false);
@@ -348,11 +337,11 @@ namespace Pete.UI
 
             if (bottomStatusBadgeText != null)
             {
-                bottomStatusBadgeText.text = "[!] ผีกรี๊ด! ตัวหนังสือทะลักเต็มจอ!";
+                bottomStatusBadgeText.text = "[!] ผีกรี๊ด! รีบกด A/D หันไปสวดมนต์ที่ศาลเจ้า!";
                 bottomStatusBadgeText.color = new Color(0.98f, 0.28f, 0.28f, 1f);
             }
 
-            if (GhostManager.Instance != null && Application.isPlaying)
+            if (GhostManager.Instance != null && Application.isPlaying && !GhostManager.Instance.IsCountdownActive)
             {
                 GhostManager.Instance.StartGhostCountdown(GhostType.Scream);
             }
@@ -367,7 +356,7 @@ namespace Pete.UI
             {
                 phoneScreenBgImage.color = isHorrorRed
                     ? new Color(0.58f, 0.04f, 0.04f, 1f)
-                    : new Color(0.02f, 0.05f, 0.07f, 1f);
+                    : new Color(0.015f, 0.035f, 0.05f, 1f);
             }
             if (phoneFrameBezelImage != null)
             {
@@ -393,6 +382,7 @@ namespace Pete.UI
             visualMode = ActivePhoneVisualMode.NormalIncoming;
             ApplyThemeColors(false);
 
+            if (idleStandbyPanel != null) idleStandbyPanel.SetActive(false);
             if (ringingPanel != null) ringingPanel.SetActive(true);
             if (inCallPanel != null) inCallPanel.SetActive(false);
             if (decisionPanel != null) decisionPanel.SetActive(false);
@@ -403,6 +393,12 @@ namespace Pete.UI
             if (callerNumberText != null) callerNumberText.text = call.callerNumber;
             if (inCallCallerNameText != null) inCallCallerNameText.text = $"\"{call.callerName}\"";
             if (inCallCallerNumberText != null) inCallCallerNumberText.text = call.callerNumber;
+
+            if (bottomStatusBadgeText != null)
+            {
+                bottomStatusBadgeText.text = "► สายเรียกเข้า! กดปุ่มสีเขียวเพื่อรับสาย";
+                bottomStatusBadgeText.color = new Color(0.45f, 0.92f, 0.98f, 1f);
+            }
         }
 
         private void OnCallAnswered(PhoneCallDataSO call)
@@ -423,6 +419,7 @@ namespace Pete.UI
             visualMode = ActivePhoneVisualMode.NormalInCall;
             ApplyThemeColors(false);
 
+            if (idleStandbyPanel != null) idleStandbyPanel.SetActive(false);
             if (ringingPanel != null) ringingPanel.SetActive(false);
             if (inCallPanel != null) inCallPanel.SetActive(true);
             if (decisionPanel != null) decisionPanel.SetActive(false);
@@ -442,20 +439,41 @@ namespace Pete.UI
             {
                 if (decisionPanel != null) decisionPanel.SetActive(true);
                 if (nextDialogueButton != null) nextDialogueButton.gameObject.SetActive(false);
+                if (bottomStatusBadgeText != null)
+                {
+                    bottomStatusBadgeText.text = "► เลือก APPROVE หรือ DECLINE สายนี้";
+                    bottomStatusBadgeText.color = new Color(0.45f, 0.92f, 0.98f, 1f);
+                }
             }
             else
             {
                 if (decisionPanel != null) decisionPanel.SetActive(false);
                 if (nextDialogueButton != null) nextDialogueButton.gameObject.SetActive(!isLastLine);
+                if (bottomStatusBadgeText != null)
+                {
+                    bottomStatusBadgeText.text = "● กำลังสนทนา... กดฟังประโยคถัดไป";
+                    bottomStatusBadgeText.color = new Color(0.45f, 0.92f, 0.98f, 1f);
+                }
             }
         }
 
         private void OnCallEnded()
         {
-            if (visualMode != ActivePhoneVisualMode.GhostEyeball && visualMode != ActivePhoneVisualMode.GhostScream)
+            bool ghostRunning = GhostManager.Instance != null && GhostManager.Instance.IsCountdownActive;
+            if (!ghostRunning && visualMode != ActivePhoneVisualMode.GhostEyeball && visualMode != ActivePhoneVisualMode.GhostScream)
             {
-                ShowDemoIncomingCall(isDemoFakeCase);
+                ShowIdleStandbyScreen();
             }
+        }
+
+        private void OnGhostResolved()
+        {
+            ShowIdleStandbyScreen();
+        }
+
+        private void OnGhostDebuffResolved(GhostType type, float duration)
+        {
+            ShowIdleStandbyScreen();
         }
 
         private void OnAnswerClicked()
@@ -463,31 +481,6 @@ namespace Pete.UI
             if (PhoneManager.Instance != null && PhoneManager.Instance.CurrentState == PhoneManager.PhoneState.Ringing)
             {
                 PhoneManager.Instance.AnswerCall();
-                return;
-            }
-
-            // Demo interactive flow when no scheduled PhoneManager call is ringing
-            visualMode = ActivePhoneVisualMode.NormalInCall;
-            demoDialogueIdx = 0;
-            if (ringingPanel != null) ringingPanel.SetActive(false);
-            if (inCallPanel != null) inCallPanel.SetActive(true);
-            UpdateDemoDialogueView();
-        }
-
-        private void UpdateDemoDialogueView()
-        {
-            string[] lines = isDemoFakeCase ? fakeDialogueLines : realDialogueLines;
-            demoDialogueIdx = Mathf.Clamp(demoDialogueIdx, 0, lines.Length - 1);
-            bool isLast = (demoDialogueIdx >= lines.Length - 1);
-
-            if (dialogueText != null) dialogueText.text = lines[demoDialogueIdx];
-            if (nextDialogueButton != null) nextDialogueButton.gameObject.SetActive(!isLast);
-            if (decisionPanel != null) decisionPanel.SetActive(isLast);
-            if (bottomStatusBadgeText != null)
-            {
-                bottomStatusBadgeText.text = isLast
-                    ? "► เลือก APPROVE หรือ DECLINE สายนี้"
-                    : "● กำลังสนทนา... กดฟังประโยคถัดไป";
             }
         }
 
@@ -496,11 +489,7 @@ namespace Pete.UI
             if (PhoneManager.Instance != null && PhoneManager.Instance.CurrentState == PhoneManager.PhoneState.InCall)
             {
                 PhoneManager.Instance.NextDialogue();
-                return;
             }
-
-            demoDialogueIdx++;
-            UpdateDemoDialogueView();
         }
 
         private void OnAcceptOfferClicked()
@@ -508,39 +497,32 @@ namespace Pete.UI
             if (PhoneManager.Instance != null && PhoneManager.Instance.CurrentState == PhoneManager.PhoneState.InCall)
             {
                 PhoneManager.Instance.AcceptCallOffer();
-                return;
+                ShowIdleStandbyScreen();
             }
-
-            if (ScoreManager.Instance != null)
-                ScoreManager.Instance.RecordJobAccepted(isDemoFakeCase);
-
-            if (bottomStatusBadgeText != null)
-            {
-                bool ok = !isDemoFakeCase;
-                bottomStatusBadgeText.text = ok ? "[+] รับสายงานจริงสำเร็จ!" : "[!] พลาด! คุณหลงเชื่อสายมิจฉาชีพ!";
-                bottomStatusBadgeText.color = ok ? new Color(0.29f, 0.87f, 0.50f, 1f) : new Color(0.98f, 0.28f, 0.28f, 1f);
-            }
-            ShowDemoIncomingCall(!isDemoFakeCase);
         }
 
         private void OnDeclineOfferClicked()
         {
-            if (PhoneManager.Instance != null && PhoneManager.Instance.CurrentState == PhoneManager.PhoneState.InCall)
+            if (PhoneManager.Instance != null &&
+                (PhoneManager.Instance.CurrentState == PhoneManager.PhoneState.InCall ||
+                 PhoneManager.Instance.CurrentState == PhoneManager.PhoneState.Ringing))
             {
+                var currentCall = PhoneManager.Instance.CurrentCall;
+                bool isGhost = currentCall != null && PhoneManager.Instance.IsGhostCall(currentCall.callType);
+                CallType ghostCallType = currentCall != null ? currentCall.callType : CallType.JobOffer;
+
                 PhoneManager.Instance.DeclineCallOffer();
-                return;
-            }
 
-            if (ScoreManager.Instance != null)
-                ScoreManager.Instance.RecordJobDeclined(isDemoFakeCase);
-
-            if (bottomStatusBadgeText != null)
-            {
-                bool ok = isDemoFakeCase;
-                bottomStatusBadgeText.text = ok ? "[+] ตัดสายมิจฉาชีพสำเร็จ!" : "[!] คุณปฏิเสธสายงานจริง!";
-                bottomStatusBadgeText.color = ok ? new Color(0.29f, 0.87f, 0.50f, 1f) : new Color(0.98f, 0.28f, 0.28f, 1f);
+                if (isGhost)
+                {
+                    if (ghostCallType == CallType.GhostThreat) TriggerGhostEyeballMode();
+                    else TriggerGhostScreamMode();
+                }
+                else
+                {
+                    ShowIdleStandbyScreen();
+                }
             }
-            ShowDemoIncomingCall(!isDemoFakeCase);
         }
     }
 }

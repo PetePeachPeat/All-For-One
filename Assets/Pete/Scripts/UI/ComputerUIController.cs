@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.EventSystems;
 using TMPro;
 using Pete.Data;
 using Pete.Systems;
@@ -15,6 +14,8 @@ namespace Pete.UI
     public class CRTMessageCardRefs
     {
         public GameObject cardRoot;
+        public GameObject activeContentRoot;
+        public GameObject emptySlotRoot;
         public Image cardBorderImage;
         public Image cardBgImage;
         public TextMeshProUGUI idText;
@@ -28,71 +29,6 @@ namespace Pete.UI
         public Button declineButton;
     }
 
-    public class FolderHoverZoomFX : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
-    {
-        public RectTransform iconContainer;
-        public Image cardBorder;
-        public Image cardBackground;
-        public TextMeshProUGUI folderLabel;
-
-        private bool isHovered;
-        private Vector3 baseScale = Vector3.one;
-        private Vector2 baseAnchoredPos;
-        private bool initialized;
-
-        private void Awake()
-        {
-            InitIfNeeded();
-        }
-
-        private void InitIfNeeded()
-        {
-            if (initialized) return;
-            initialized = true;
-            if (iconContainer != null)
-            {
-                baseScale = iconContainer.localScale;
-                baseAnchoredPos = iconContainer.anchoredPosition;
-            }
-        }
-
-        private void OnEnable()
-        {
-            InitIfNeeded();
-            isHovered = false;
-            if (iconContainer != null)
-            {
-                iconContainer.localScale = baseScale;
-                iconContainer.anchoredPosition = baseAnchoredPos;
-            }
-        }
-
-        public void OnPointerEnter(PointerEventData eventData)
-        {
-            isHovered = true;
-            if (cardBorder != null) cardBorder.color = new Color(0.53f, 0.94f, 0.67f, 1f);
-            if (cardBackground != null) cardBackground.color = new Color(0.03f, 0.18f, 0.09f, 0.92f);
-            if (folderLabel != null) folderLabel.color = Color.white;
-        }
-
-        public void OnPointerExit(PointerEventData eventData)
-        {
-            isHovered = false;
-            if (cardBorder != null) cardBorder.color = new Color(0.13f, 0.77f, 0.37f, 0.85f);
-            if (cardBackground != null) cardBackground.color = new Color(0.015f, 0.10f, 0.05f, 0.82f);
-            if (folderLabel != null) folderLabel.color = new Color(0.29f, 0.87f, 0.50f, 1f);
-        }
-
-        private void Update()
-        {
-            if (iconContainer == null) return;
-            Vector3 targetScale = isHovered ? baseScale * 1.34f : baseScale;
-            Vector2 targetPos = isHovered ? baseAnchoredPos + new Vector2(0f, 8f) : baseAnchoredPos;
-            iconContainer.localScale = Vector3.Lerp(iconContainer.localScale, targetScale, Time.unscaledDeltaTime * 14f);
-            iconContainer.anchoredPosition = Vector2.Lerp(iconContainer.anchoredPosition, targetPos, Time.unscaledDeltaTime * 14f);
-        }
-    }
-
     public class ComputerUIController : MonoBehaviour
     {
         [Header("Desktop Root Panel")]
@@ -103,7 +39,6 @@ namespace Pete.UI
         [SerializeField] private TextMeshProUGUI timeDisplay12HText;
         [SerializeField] private TextMeshProUGUI nightDisplayText;
         [SerializeField] private Button exitComputerButton;
-        [SerializeField] private Button replayDesktopAnimButton;
         [SerializeField] private Button crtPowerButton;
         [SerializeField] private GameObject crtPowerOffOverlay;
         [SerializeField] private RectTransform scanBeamRect;
@@ -122,23 +57,11 @@ namespace Pete.UI
         [Header("GMAIL Window (3-Column Terminal View)")]
         [SerializeField] private GameObject gmailWindow;
         [SerializeField] private Button gmailCloseButton;
-        [SerializeField] private Button gmailReplayAnimButton;
-        [SerializeField] private Transform emailListContainer;
-        [SerializeField] private GameObject emailListItemPrefab;
         [SerializeField] private List<CRTMessageCardRefs> gmailCards = new List<CRTMessageCardRefs>();
-
-        [Header("GMAIL - Selected Email View (Legacy Compatibility)")]
-        [SerializeField] private TextMeshProUGUI emailSenderText;
-        [SerializeField] private TextMeshProUGUI emailSubjectText;
-        [SerializeField] private TextMeshProUGUI emailBodyText;
-        [SerializeField] private GameObject openWebsiteLinkButton;
-        [SerializeField] private Button emailAcceptButton;
-        [SerializeField] private Button emailDeclineButton;
 
         [Header("WEBSITE List Window (3-Column Link Selector View)")]
         [SerializeField] private GameObject websiteListWindow;
         [SerializeField] private Button websiteListCloseButton;
-        [SerializeField] private Button websiteListReplayAnimButton;
         [SerializeField] private List<CRTMessageCardRefs> websiteCards = new List<CRTMessageCardRefs>();
 
         [Header("WEBSITE Browser Preview Window")]
@@ -147,13 +70,10 @@ namespace Pete.UI
         [SerializeField] private Button websiteBackToListButton;
         [SerializeField] private TextMeshProUGUI websiteUrlText;
         [SerializeField] private TextMeshProUGUI websiteSenderNoteText;
-        [SerializeField] private TextMeshProUGUI websiteSecurityBadgeText;
-        [SerializeField] private Image websiteSecurityBadgeBg;
         [SerializeField] private TextMeshProUGUI websiteTitleText;
         [SerializeField] private TextMeshProUGUI websiteDescText;
         [SerializeField] private List<TextMeshProUGUI> websiteFormFieldTexts = new List<TextMeshProUGUI>();
         [SerializeField] private List<Button> websiteTabButtons = new List<Button>();
-        [SerializeField] private Image websitePreviewImage;
         [SerializeField] private Button websiteAcceptButton;
         [SerializeField] private Button websiteDeclineButton;
 
@@ -168,27 +88,33 @@ namespace Pete.UI
         [SerializeField] private CanvasGroup breachRedOverlay;
         [SerializeField] private CanvasGroup breachCrackOverlay;
 
-        // Runtime states
-        private EmailDataSO currentlySelectedEmail;
-        private EmailDataSO currentlySelectedWebsiteEmail;
+        [Header("Random Task Spawner Settings")]
+        [SerializeField] private float initialSpawnDelayMin = 3.5f;
+        [SerializeField] private float initialSpawnDelayMax = 6.0f;
+        [SerializeField] private float nextSpawnIntervalMin = 10.0f;
+        [SerializeField] private float nextSpawnIntervalMax = 17.0f;
+
         private int currentWebBrowserIdx = 0;
         private bool isCrtPoweredOn = true;
+        private float nextRandomTaskTimer = 4.5f;
+        [Header("Audio")]
+        [SerializeField] private AudioSource pingAudioSource;
+        [SerializeField] private AudioClip terminalPingClip;
 
         private struct TerminalMailItem
         {
+            public bool hasItem;
             public string idLabel;
             public string badgeDefault;
             public string fromAddress;
             public string metaLabel;
             public string body;
             public bool isScam;
-            public bool judged;
-            public bool judgedCorrect;
-            public string judgedStatus;
         }
 
         private struct TerminalWebItem
         {
+            public bool hasItem;
             public string idLabel;
             public string tabLabel;
             public string badgeDefault;
@@ -202,26 +128,74 @@ namespace Pete.UI
             public string webTitle;
             public string webDesc;
             public string[] webFields;
-            public bool judged;
-            public bool judgedCorrect;
-            public string judgedStatus;
         }
 
-        private TerminalMailItem[] gmailData;
-        private TerminalWebItem[] webData;
+        private TerminalMailItem[] gmailSlots;
+        private TerminalWebItem[] webSlots;
+
+        private List<TerminalMailItem> mailPool = new List<TerminalMailItem>();
+        private List<TerminalWebItem> webPool = new List<TerminalWebItem>();
+        private int lastMailPoolIdx = -1;
+        private int lastWebPoolIdx = -1;
 
         private void Awake()
         {
-            InitTerminalData();
+            InitPoolsAndEmptySlots();
+            EnsurePingAudio();
         }
 
-        private void InitTerminalData()
+        private void EnsurePingAudio()
         {
-            gmailData = new TerminalMailItem[]
+            pingAudioSource = GetComponent<AudioSource>();
+            if (pingAudioSource == null)
+            {
+                pingAudioSource = gameObject.AddComponent<AudioSource>();
+                pingAudioSource.playOnAwake = false;
+                pingAudioSource.loop = false;
+            }
+            if (terminalPingClip == null)
+            {
+                terminalPingClip = GenerateTerminalPingClip();
+            }
+        }
+
+        private static AudioClip GenerateTerminalPingClip()
+        {
+            int sampleRate = 22050;
+            float duration = 0.24f;
+            int total = Mathf.RoundToInt(sampleRate * duration);
+            float[] samples = new float[total];
+            for (int i = 0; i < total; i++)
+            {
+                float t = (float)i / sampleRate;
+                float freq = (t < 0.11f) ? 880f : 1174.66f;
+                float env = Mathf.Clamp01(1f - (t / duration));
+                samples[i] = Mathf.Sin(2f * Mathf.PI * freq * t) * 0.22f * env;
+            }
+            var clip = AudioClip.Create("ProceduralTerminalPing", total, 1, sampleRate, false);
+            clip.SetData(samples, 0);
+            return clip;
+        }
+
+        private void PlayTerminalNotificationPing()
+        {
+            if (pingAudioSource != null && terminalPingClip != null)
+            {
+                float sfxVol = PlayerPrefs.GetInt("MM_VolSFX", PlayerPrefs.GetInt("MM_VolSfx", 85)) / 100f;
+                pingAudioSource.PlayOneShot(terminalPingClip, Mathf.Clamp01(0.75f * sfxVol));
+            }
+        }
+
+        private void InitPoolsAndEmptySlots()
+        {
+            // All 3 Gmail slots and 3 Website slots start EMPTY!
+            gmailSlots = new TerminalMailItem[3];
+            webSlots = new TerminalWebItem[3];
+
+            mailPool = new List<TerminalMailItem>
             {
                 new TerminalMailItem
                 {
-                    idLabel = "ข้อความ 01",
                     badgeDefault = "งานออนไลน์",
                     fromAddress = "vip-job@fast-money.net",
                     metaLabel = "โอนค่ามัดจำ 1,500฿",
@@ -230,7 +204,6 @@ namespace Pete.UI
                 },
                 new TerminalMailItem
                 {
-                    idLabel = "ข้อความ 02",
                     badgeDefault = "นัดสัมภาษณ์",
                     fromAddress = "hr@sec-corp.co.th",
                     metaLabel = "Contract_2026.pdf",
@@ -239,21 +212,58 @@ namespace Pete.UI
                 },
                 new TerminalMailItem
                 {
-                    idLabel = "ข้อความ 03",
                     badgeDefault = "ด่วนที่สุด",
                     fromAddress = "admin@dark-payroll.xyz",
                     metaLabel = "Salary_Slip.pdf.exe",
                     body = "จ้างเปิดบัญชีรับโอนเงินเดือนละ 30,000฿ ส่งสมุดบัญชีและรหัส ATM มาให้ทางบริษัททันที",
                     isScam = true
+                },
+                new TerminalMailItem
+                {
+                    badgeDefault = "ฝ่ายบุคคล",
+                    fromAddress = "recruit@nova-logistics.co.th",
+                    metaLabel = "Shift_Schedule.pdf",
+                    body = "ยืนยันรับท่านเข้าทำงานพนักงานตรวจเช็กสต็อกกะดึก เงินเดือน 24,500฿ มีประกันสังคมครบ ไม่มีค่าธรรมเนียม",
+                    isScam = false
+                },
+                new TerminalMailItem
+                {
+                    badgeDefault = "งานแพ็กของ",
+                    fromAddress = "home-pack99@easy-cash.org",
+                    metaLabel = "โอนค่าประกันอุปกรณ์ 990฿",
+                    body = "รับงานแพ็กสบู่ส่งออกที่บ้าน รายได้ดี แต่ต้องโอนค่ามัดจำอุปกรณ์ล่วงหน้า 990฿ เข้าบัญชีส่วนบุคคลก่อนจัดส่ง",
+                    isScam = true
+                },
+                new TerminalMailItem
+                {
+                    badgeDefault = "รับสมัครงาน",
+                    fromAddress = "careers@datalink-center.co.th",
+                    metaLabel = "Offer_Letter.pdf",
+                    body = "บริษัท DATA-LINK ตอบรับท่านในตำแหน่งพนักงานคีย์ข้อมูลกะดึก มีอุปกรณ์ให้ยืมฟรีโดยไม่เก็บเงินมัดจำ",
+                    isScam = false
+                },
+                new TerminalMailItem
+                {
+                    badgeDefault = "แจ้งเตือนบัญชี",
+                    fromAddress = "security@bank-verify-alert.xyz",
+                    metaLabel = "Urgent_Unlock.scr.exe",
+                    body = "บัญชีรับเงินเดือนของท่านถูกล็อกชั่วคราว กรุณาเปิดไฟล์แนบ .exe และโอนเงิน 2,000฿ เพื่อยืนยันตัวตนทันที",
+                    isScam = true
+                },
+                new TerminalMailItem
+                {
+                    badgeDefault = "งานพาร์ทไทม์",
+                    fromAddress = "hr@metro-archive.co.th",
+                    metaLabel = "Document_Check_Job.pdf",
+                    body = "รับเจ้าหน้าที่ตรวจสอบเอกสารดิจิทัลกะดึก จ่ายเงินโอนเข้าบัญชีโดยตรงทุกสัปดาห์ ไม่มีการเรียกเก็บค่าสมัคร",
+                    isScam = false
                 }
             };
 
-            webData = new TerminalWebItem[]
+            webPool = new List<TerminalWebItem>
             {
                 new TerminalWebItem
                 {
-                    idLabel = "ข้อความเว็บ 01",
-                    tabLabel = "เว็บไซต์ 01",
                     badgeDefault = "คืนค่าไฟ",
                     fromAddress = "claim@mea-refund.net",
                     shortUrl = "http://mea-free-refund.net",
@@ -262,14 +272,12 @@ namespace Pete.UI
                     cardBody = "สิทธิ์รับเงินคืนค่าไฟ 4,500฿ กดลิงก์แนบเพื่อกรอกเลขบัญชีและรหัส PIN รับเงินทันที",
                     isSecureHttps = false,
                     isScam = true,
-                    webTitle = "[!] ระบบรับเงินคืนค่าไฟด่วน (MEA REFUND)",
+                    webTitle = "ระบบรับเงินคืนค่าไฟด่วน (MEA REFUND)",
                     webDesc = "กรุณากรอกข้อมูลเพื่อรับเงินคืน 4,500 บาท เข้าบัญชีทันที:",
                     webFields = new[] { "เบอร์โทรศัพท์", "เลขบัญชีธนาคาร", "รหัส PIN ATM 6 หลัก (บังคับกรอก)" }
                 },
                 new TerminalWebItem
                 {
-                    idLabel = "ข้อความเว็บ 02",
-                    tabLabel = "เว็บไซต์ 02",
                     badgeDefault = "งานบริษัท",
                     fromAddress = "hr@sec-corp.co.th",
                     shortUrl = "https://sec-corp.co.th",
@@ -278,14 +286,12 @@ namespace Pete.UI
                     cardBody = "เว็บลงทะเบียนพนักงานใหม่ SEC-CORP กดลิงก์เพื่อกรอกชื่อและเลือกกะทำงาน (ไม่มีค่าสมัคร)",
                     isSecureHttps = true,
                     isScam = false,
-                    webTitle = "[HTTPS] ระบบยืนยันตัวตนพนักงานใหม่ บจก. SEC-CORP",
+                    webTitle = "ระบบยืนยันตัวตนพนักงานใหม่ บจก. SEC-CORP",
                     webDesc = "กรอกชื่อและเลือกกะเวลาทำงาน (เงินเดือน 28,000฿ ไม่มีค่าธรรมเนียมใดๆ):",
                     webFields = new[] { "ชื่อ-นามสกุลพนักงาน", "เบอร์โทรศัพท์ติดต่อ", "กะเวลาทำงาน (Night Shift 00:00 - 06:00)" }
                 },
                 new TerminalWebItem
                 {
-                    idLabel = "ข้อความเว็บ 03",
-                    tabLabel = "เว็บไซต์ 03",
                     badgeDefault = "หุ้น AI",
                     fromAddress = "vip@ai-trade888.xyz",
                     shortUrl = "http://rich-ai-trade888.xyz",
@@ -294,19 +300,61 @@ namespace Pete.UI
                     cardBody = "เว็บเทรดหุ้น AI กำไร 300% กดลิงก์เพื่อฝากเงิน 1,000฿ และกรอกรหัสผ่านแอปธนาคาร",
                     isSecureHttps = false,
                     isScam = true,
-                    webTitle = "[!] AI SUPER TRADE // ฝาก 1,000฿ ถอนได้ 10,000฿",
+                    webTitle = "AI SUPER TRADE // ฝาก 1,000฿ ถอนได้ 10,000฿",
                     webDesc = "โอนเงินเปิดพอร์ตขั้นต่ำ 1,000 บาท พร้อมกรอกรหัสผ่าน Mobile Banking:",
                     webFields = new[] { "ไอดีผู้ใช้งาน", "รหัสผ่านแอปธนาคาร 6 หลัก", "จำนวนเงินโอนเปิดพอร์ต (ขั้นต่ำ 1,000฿)" }
+                },
+                new TerminalWebItem
+                {
+                    badgeDefault = "คลังสินค้า",
+                    fromAddress = "hr@nova-logistics.co.th",
+                    shortUrl = "https://nova-logistics.co.th",
+                    fullUrl = "https://portal.nova-logistics.co.th/staff-checkin",
+                    senderNote = "แบบฟอร์มรายงานตัวพนักงานคลังสินค้า (แนบลิงก์)",
+                    cardBody = "กรุณากรอกรหัสพนักงานและเลือกสาขาที่สะดวกเข้ากะดึก (ไม่ต้องกรอกข้อมูลบัตรเครดิตหรือรหัสผ่านธนาคาร)",
+                    isSecureHttps = true,
+                    isScam = false,
+                    webTitle = "NOVA LOGISTICS // ระบบลงทะเบียนพนักงานเข้ากะดึก",
+                    webDesc = "ยืนยันตารางเริ่มงานและเลือกจุดรับชุดยูนิฟอร์มฟรี:",
+                    webFields = new[] { "ชื่อ-นามสกุลจริง", "สาขาคลังสินค้าที่เลือก", "ขนาดชุดยูนิฟอร์ม (S / M / L / XL)" }
+                },
+                new TerminalWebItem
+                {
+                    badgeDefault = "อนุมัติไว",
+                    fromAddress = "loan@fast-vip-money.xyz",
+                    shortUrl = "http://fast-vip-money.xyz",
+                    fullUrl = "http://fast-vip-money.xyz/unlock-wallet",
+                    senderNote = "เว็บเบิกเงินเดือนล่วงหน้าด่วน (แนบลิงก์)",
+                    cardBody = "กดลิงก์เพื่อรับวงเงินทำงานล่วงหน้า 20,000฿ โดยมีเงื่อนไขต้องโอนค่าปลดล็อกระบบ 1,800฿ ก่อน",
+                    isSecureHttps = false,
+                    isScam = true,
+                    webTitle = "FAST VIP WALLET // เบิกเงินล่วงหน้า 20,000฿",
+                    webDesc = "กรอกข้อมูลบัตรเดบิตและโอนเงินค่าถอนรหัสปลดล็อก 1,800 บาท:",
+                    webFields = new[] { "เลขหน้าบัตร ATM 16 หลัก", "รหัส CVV หลังบัตร 3 หลัก", "รหัส OTP ที่ได้รับทาง SMS" }
+                },
+                new TerminalWebItem
+                {
+                    badgeDefault = "คีย์ข้อมูล",
+                    fromAddress = "onboarding@datalink-center.co.th",
+                    shortUrl = "https://datalink-center.co.th",
+                    fullUrl = "https://www.datalink-center.co.th/remote-work",
+                    senderNote = "ระบบรับงานคีย์ข้อมูลกะดึก DATA-LINK (แนบลิงก์)",
+                    cardBody = "เข้าสู่ระบบพอร์ทัลพนักงานของ DATA-LINK เพื่อยืนยันอีเมลรับส่งงาน (ไม่มีค่าใช้จ่ายแรกเข้า)",
+                    isSecureHttps = true,
+                    isScam = false,
+                    webTitle = "DATA-LINK CENTER // พอร์ทัลรับงานคีย์ข้อมูลออนไลน์",
+                    webDesc = "ลงทะเบียนอีเมลสำหรับรับไฟล์งานเอกสารประจำกะดึก:",
+                    webFields = new[] { "ชื่อ-นามสกุลผู้ปฏิบัติงาน", "อีเมลสำหรับรับไฟล์งาน", "หมายเลขโทรศัพท์ติดต่อกลับ" }
                 }
             };
+
+            nextRandomTaskTimer = UnityEngine.Random.Range(initialSpawnDelayMin, initialSpawnDelayMax);
         }
 
         private void Start()
         {
             if (exitComputerButton != null)
                 exitComputerButton.onClick.AddListener(ExitComputer);
-            if (replayDesktopAnimButton != null)
-                replayDesktopAnimButton.onClick.AddListener(PlayScanBeamSweep);
             if (crtPowerButton != null)
                 crtPowerButton.onClick.AddListener(ToggleCrtPower);
 
@@ -314,15 +362,11 @@ namespace Pete.UI
                 gmailIconButton.onClick.AddListener(OpenGmailWindow);
             if (gmailCloseButton != null)
                 gmailCloseButton.onClick.AddListener(ShowDesktopFolders);
-            if (gmailReplayAnimButton != null)
-                gmailReplayAnimButton.onClick.AddListener(PlayScanBeamSweep);
 
             if (websiteIconButton != null)
                 websiteIconButton.onClick.AddListener(OpenWebsiteWindow);
             if (websiteListCloseButton != null)
                 websiteListCloseButton.onClick.AddListener(ShowDesktopFolders);
-            if (websiteListReplayAnimButton != null)
-                websiteListReplayAnimButton.onClick.AddListener(PlayScanBeamSweep);
 
             if (websiteCloseButton != null)
                 websiteCloseButton.onClick.AddListener(ShowDesktopFolders);
@@ -336,21 +380,10 @@ namespace Pete.UI
             if (rulesAcknowledgeButton != null)
                 rulesAcknowledgeButton.onClick.AddListener(ShowDesktopFolders);
 
-            if (emailAcceptButton != null)
-                emailAcceptButton.onClick.AddListener(OnAcceptCurrentEmail);
-            if (emailDeclineButton != null)
-                emailDeclineButton.onClick.AddListener(OnDeclineCurrentEmail);
-
             if (websiteAcceptButton != null)
                 websiteAcceptButton.onClick.AddListener(() => JudgeWebsiteCard(currentWebBrowserIdx, true));
             if (websiteDeclineButton != null)
                 websiteDeclineButton.onClick.AddListener(() => JudgeWebsiteCard(currentWebBrowserIdx, false));
-
-            if (openWebsiteLinkButton != null)
-            {
-                var btn = openWebsiteLinkButton.GetComponent<Button>();
-                if (btn != null) btn.onClick.AddListener(OnOpenWebsiteFromEmail);
-            }
 
             // Wire 3 Gmail Cards
             for (int i = 0; i < gmailCards.Count; i++)
@@ -390,12 +423,6 @@ namespace Pete.UI
                 UpdateTimeDisplay(GameTimeManager.Instance.CurrentHour, GameTimeManager.Instance.CurrentMinute);
             }
 
-            if (EmailManager.Instance != null)
-            {
-                EmailManager.Instance.OnEmailReceived += OnNewEmailReceived;
-                EmailManager.Instance.OnEmailStatusUpdated += RefreshBadgesAndList;
-            }
-
             RefreshAllCardsUI();
             ShowDesktopFolders();
 
@@ -406,6 +433,111 @@ namespace Pete.UI
             }
 
             if (desktopRootPanel != null) desktopRootPanel.SetActive(false);
+        }
+
+        private void Update()
+        {
+            if (!Application.isPlaying) return;
+            if (GameTimeManager.Instance != null && !GameTimeManager.Instance.IsNightActive) return;
+
+            nextRandomTaskTimer -= Time.deltaTime;
+            if (nextRandomTaskTimer <= 0f)
+            {
+                SpawnNextRandomNightTask();
+                nextRandomTaskTimer = UnityEngine.Random.Range(nextSpawnIntervalMin, nextSpawnIntervalMax);
+            }
+        }
+
+        private void SpawnNextRandomNightTask()
+        {
+            if (gmailSlots == null || webSlots == null) InitPoolsAndEmptySlots();
+
+            int emptyGmailSlot = FindEmptyGmailSlot();
+            int emptyWebSlot = FindEmptyWebSlot();
+            bool canPhoneRing = PhoneManager.Instance != null &&
+                                PhoneManager.Instance.CurrentState == PhoneManager.PhoneState.Idle &&
+                                (GhostManager.Instance == null || !GhostManager.Instance.IsCountdownActive);
+
+            var candidates = new List<int>(3);
+            if (emptyGmailSlot >= 0) candidates.Add(0); // 0 = Gmail
+            if (emptyWebSlot >= 0) candidates.Add(1);   // 1 = Website
+            if (canPhoneRing) candidates.Add(2);        // 2 = Phone Call
+
+            if (candidates.Count == 0) return;
+
+            int chosenType = candidates[UnityEngine.Random.Range(0, candidates.Count)];
+            if (chosenType == 0)
+            {
+                SpawnRandomGmailIntoSlot(emptyGmailSlot);
+            }
+            else if (chosenType == 1)
+            {
+                SpawnRandomWebIntoSlot(emptyWebSlot);
+            }
+            else if (chosenType == 2 && PhoneManager.Instance != null)
+            {
+                PhoneManager.Instance.TryTriggerRandomCall();
+            }
+        }
+
+        private int FindEmptyGmailSlot()
+        {
+            for (int i = 0; i < gmailSlots.Length; i++)
+            {
+                if (!gmailSlots[i].hasItem) return i;
+            }
+            return -1;
+        }
+
+        private int FindEmptyWebSlot()
+        {
+            for (int i = 0; i < webSlots.Length; i++)
+            {
+                if (!webSlots[i].hasItem) return i;
+            }
+            return -1;
+        }
+
+        private void SpawnRandomGmailIntoSlot(int slotIdx)
+        {
+            if (slotIdx < 0 || slotIdx >= gmailSlots.Length || mailPool.Count == 0) return;
+
+            int poolIdx = UnityEngine.Random.Range(0, mailPool.Count);
+            if (mailPool.Count > 1 && poolIdx == lastMailPoolIdx)
+                poolIdx = (poolIdx + 1) % mailPool.Count;
+            lastMailPoolIdx = poolIdx;
+
+            var item = mailPool[poolIdx];
+            item.hasItem = true;
+            item.idLabel = $"ข้อความ 0{slotIdx + 1}";
+            gmailSlots[slotIdx] = item;
+
+            PlayTerminalNotificationPing();
+            RefreshAllCardsUI();
+        }
+
+        private void SpawnRandomWebIntoSlot(int slotIdx)
+        {
+            if (slotIdx < 0 || slotIdx >= webSlots.Length || webPool.Count == 0) return;
+
+            int poolIdx = UnityEngine.Random.Range(0, webPool.Count);
+            if (webPool.Count > 1 && poolIdx == lastWebPoolIdx)
+                poolIdx = (poolIdx + 1) % webPool.Count;
+            lastWebPoolIdx = poolIdx;
+
+            var item = webPool[poolIdx];
+            item.hasItem = true;
+            item.idLabel = $"ข้อความเว็บ 0{slotIdx + 1}";
+            item.tabLabel = $"เว็บไซต์ 0{slotIdx + 1}";
+            webSlots[slotIdx] = item;
+
+            PlayTerminalNotificationPing();
+            RefreshAllCardsUI();
+
+            if (websiteWindow != null && websiteWindow.activeSelf)
+            {
+                RenderWebsiteBrowserDetail(currentWebBrowserIdx);
+            }
         }
 
         private void HandleInspectStarted(InspectTargetType type)
@@ -438,12 +570,6 @@ namespace Pete.UI
             }
             if (GameTimeManager.Instance != null)
                 GameTimeManager.Instance.OnTimeChanged -= UpdateTimeDisplay;
-
-            if (EmailManager.Instance != null)
-            {
-                EmailManager.Instance.OnEmailReceived -= OnNewEmailReceived;
-                EmailManager.Instance.OnEmailStatusUpdated -= RefreshBadgesAndList;
-            }
         }
 
         public void ExitComputer()
@@ -502,17 +628,12 @@ namespace Pete.UI
         {
             if (timeDisplay12HText != null && GameTimeManager.Instance != null)
             {
-                timeDisplay12HText.text = GameTimeManager.Instance.GetDisplayHour12H();
+                timeDisplay12HText.text = $"{GameTimeManager.Instance.GetDisplayTime24H()} ({GameTimeManager.Instance.GetDisplayHour12H()})";
             }
             if (nightDisplayText != null)
             {
                 nightDisplayText.text = "NIGHT 1";
             }
-        }
-
-        private void OnNewEmailReceived(EmailDataSO email)
-        {
-            RefreshBadgesAndList();
         }
 
         public void RefreshBadgesAndList()
@@ -522,38 +643,51 @@ namespace Pete.UI
 
         private void RefreshAllCardsUI()
         {
-            if (gmailData == null || webData == null) InitTerminalData();
+            if (gmailSlots == null || webSlots == null) InitPoolsAndEmptySlots();
 
-            int gmailRemaining = 0;
-            for (int i = 0; i < gmailData.Length; i++)
+            int gmailActiveCount = 0;
+            for (int i = 0; i < gmailSlots.Length; i++)
             {
-                if (!gmailData[i].judged) gmailRemaining++;
+                if (gmailSlots[i].hasItem) gmailActiveCount++;
                 if (i < gmailCards.Count)
                 {
-                    BindGmailCardUI(gmailCards[i], gmailData[i]);
+                    BindGmailCardUI(gmailCards[i], gmailSlots[i]);
                 }
             }
 
-            int webRemaining = 0;
-            for (int i = 0; i < webData.Length; i++)
+            int webActiveCount = 0;
+            for (int i = 0; i < webSlots.Length; i++)
             {
-                if (!webData[i].judged) webRemaining++;
+                if (webSlots[i].hasItem) webActiveCount++;
                 if (i < websiteCards.Count)
                 {
-                    BindWebCardUI(websiteCards[i], webData[i]);
+                    BindWebCardUI(websiteCards[i], webSlots[i]);
                 }
             }
 
-            if (gmailBadgeObject != null) gmailBadgeObject.SetActive(gmailRemaining > 0);
-            if (gmailUnreadCountText != null) gmailUnreadCountText.text = gmailRemaining.ToString();
+            if (gmailBadgeObject != null) gmailBadgeObject.SetActive(gmailActiveCount > 0);
+            if (gmailUnreadCountText != null) gmailUnreadCountText.text = gmailActiveCount.ToString();
 
-            if (websiteBadgeObject != null) websiteBadgeObject.SetActive(webRemaining > 0);
-            if (websiteAlertCountText != null) websiteAlertCountText.text = webRemaining.ToString();
+            if (websiteBadgeObject != null) websiteBadgeObject.SetActive(webActiveCount > 0);
+            if (websiteAlertCountText != null) websiteAlertCountText.text = webActiveCount.ToString();
         }
 
         private void BindGmailCardUI(CRTMessageCardRefs ui, TerminalMailItem data)
         {
             if (ui == null) return;
+
+            if (!data.hasItem)
+            {
+                if (ui.activeContentRoot != null) ui.activeContentRoot.SetActive(false);
+                if (ui.emptySlotRoot != null) ui.emptySlotRoot.SetActive(true);
+                if (ui.cardBorderImage != null) ui.cardBorderImage.color = new Color(0.08f, 0.24f, 0.14f, 0.45f);
+                return;
+            }
+
+            if (ui.activeContentRoot != null) ui.activeContentRoot.SetActive(true);
+            if (ui.emptySlotRoot != null) ui.emptySlotRoot.SetActive(false);
+            if (ui.cardBorderImage != null) ui.cardBorderImage.color = new Color(0.18f, 0.65f, 0.34f, 1f);
+
             if (ui.idText != null) ui.idText.text = data.idLabel;
             if (ui.fromText != null) ui.fromText.text = $"<color=#22c55e>จาก:</color> {data.fromAddress}";
             if (ui.metaText != null) ui.metaText.text = $"<color=#22c55e>ข้อมูล:</color> {data.metaLabel}";
@@ -561,56 +695,63 @@ namespace Pete.UI
 
             if (ui.badgeText != null)
             {
-                ui.badgeText.text = data.judged ? data.judgedStatus : data.badgeDefault;
-                ui.badgeText.color = data.judged
-                    ? (data.judgedCorrect ? new Color(0.01f, 0.04f, 0.02f, 1f) : Color.white)
-                    : new Color(0.29f, 0.87f, 0.50f, 1f);
+                ui.badgeText.text = data.badgeDefault;
+                ui.badgeText.color = new Color(0.29f, 0.87f, 0.50f, 1f);
             }
             if (ui.badgeBgImage != null)
             {
-                ui.badgeBgImage.color = data.judged
-                    ? (data.judgedCorrect ? new Color(0.29f, 0.87f, 0.50f, 1f) : new Color(0.94f, 0.27f, 0.27f, 1f))
-                    : new Color(0.08f, 0.35f, 0.18f, 1f);
+                ui.badgeBgImage.color = new Color(0.08f, 0.35f, 0.18f, 1f);
             }
-            if (ui.approveButton != null) ui.approveButton.interactable = !data.judged;
-            if (ui.declineButton != null) ui.declineButton.interactable = !data.judged;
+            if (ui.approveButton != null) ui.approveButton.interactable = true;
+            if (ui.declineButton != null) ui.declineButton.interactable = true;
         }
 
         private void BindWebCardUI(CRTMessageCardRefs ui, TerminalWebItem data)
         {
             if (ui == null) return;
+
+            if (!data.hasItem)
+            {
+                if (ui.activeContentRoot != null) ui.activeContentRoot.SetActive(false);
+                if (ui.emptySlotRoot != null) ui.emptySlotRoot.SetActive(true);
+                if (ui.cardBorderImage != null) ui.cardBorderImage.color = new Color(0.08f, 0.24f, 0.14f, 0.45f);
+                return;
+            }
+
+            if (ui.activeContentRoot != null) ui.activeContentRoot.SetActive(true);
+            if (ui.emptySlotRoot != null) ui.emptySlotRoot.SetActive(false);
+            if (ui.cardBorderImage != null) ui.cardBorderImage.color = new Color(0.18f, 0.65f, 0.34f, 1f);
+
+            bool hiUrl = PlayerPrefs.GetInt("MM_UrlHighlight", 0) == 1;
+            string urlCol = hiUrl ? (data.isSecureHttps ? "#4ade80" : "#facc15") : "#ffffff";
+
             if (ui.idText != null) ui.idText.text = data.idLabel;
             if (ui.fromText != null) ui.fromText.text = $"<color=#22c55e>จาก:</color> {data.fromAddress}";
-            if (ui.metaText != null) ui.metaText.text = $"<color=#22c55e>ลิงก์:</color> <color=#ffffff>{data.shortUrl}</color>";
+            if (ui.metaText != null) ui.metaText.text = $"<color=#22c55e>ลิงก์:</color> <color={urlCol}>{data.shortUrl}</color>";
             if (ui.bodyText != null) ui.bodyText.text = data.cardBody;
 
             if (ui.badgeText != null)
             {
-                ui.badgeText.text = data.judged ? data.judgedStatus : data.badgeDefault;
-                ui.badgeText.color = data.judged
-                    ? (data.judgedCorrect ? new Color(0.01f, 0.04f, 0.02f, 1f) : Color.white)
-                    : new Color(0.29f, 0.87f, 0.50f, 1f);
+                ui.badgeText.text = data.badgeDefault;
+                ui.badgeText.color = new Color(0.29f, 0.87f, 0.50f, 1f);
             }
             if (ui.badgeBgImage != null)
             {
-                ui.badgeBgImage.color = data.judged
-                    ? (data.judgedCorrect ? new Color(0.29f, 0.87f, 0.50f, 1f) : new Color(0.94f, 0.27f, 0.27f, 1f))
-                    : new Color(0.08f, 0.35f, 0.18f, 1f);
+                ui.badgeBgImage.color = new Color(0.08f, 0.35f, 0.18f, 1f);
             }
-            if (ui.approveButton != null) ui.approveButton.interactable = !data.judged;
-            if (ui.declineButton != null) ui.declineButton.interactable = !data.judged;
+            if (ui.approveButton != null) ui.approveButton.interactable = true;
+            if (ui.declineButton != null) ui.declineButton.interactable = true;
         }
 
         private void JudgeGmailCard(int idx, bool approve)
         {
-            if (idx < 0 || idx >= gmailData.Length || gmailData[idx].judged) return;
+            if (idx < 0 || idx >= gmailSlots.Length || !gmailSlots[idx].hasItem) return;
 
-            bool isScam = gmailData[idx].isScam;
+            bool isScam = gmailSlots[idx].isScam;
             bool isCorrect = (isScam && !approve) || (!isScam && approve);
 
-            gmailData[idx].judged = true;
-            gmailData[idx].judgedCorrect = isCorrect;
-            gmailData[idx].judgedStatus = isCorrect ? (approve ? "[+] APPROVED" : "[X] DECLINED") : "[!] พลาด!";
+            // Clear the slot immediately so it becomes an Empty Slot!
+            gmailSlots[idx].hasItem = false;
 
             if (ScoreManager.Instance != null)
             {
@@ -626,14 +767,13 @@ namespace Pete.UI
 
         private void JudgeWebsiteCard(int idx, bool approve)
         {
-            if (idx < 0 || idx >= webData.Length || webData[idx].judged) return;
+            if (idx < 0 || idx >= webSlots.Length || !webSlots[idx].hasItem) return;
 
-            bool isScam = webData[idx].isScam;
+            bool isScam = webSlots[idx].isScam;
             bool isCorrect = (isScam && !approve) || (!isScam && approve);
 
-            webData[idx].judged = true;
-            webData[idx].judgedCorrect = isCorrect;
-            webData[idx].judgedStatus = isCorrect ? (approve ? "[+] APPROVED" : "[X] DECLINED") : "[!] พลาด!";
+            // Clear the slot immediately so it becomes an Empty Slot!
+            webSlots[idx].hasItem = false;
 
             if (ScoreManager.Instance != null)
             {
@@ -645,8 +785,12 @@ namespace Pete.UI
                 TriggerBreachVisuals();
 
             RefreshAllCardsUI();
+
+            // If we judged the website from inside the browser preview window, return to the 3-column list view
             if (websiteWindow != null && websiteWindow.activeSelf)
-                RenderWebsiteBrowserDetail(currentWebBrowserIdx);
+            {
+                OpenWebsiteWindow();
+            }
         }
 
         private void TriggerBreachVisuals()
@@ -727,15 +871,13 @@ namespace Pete.UI
                 RefreshAllCardsUI();
                 PlayScanBeamSweep();
             }
-            else if (websiteWindow != null)
-            {
-                websiteWindow.SetActive(true);
-                RenderWebsiteBrowserDetail(0);
-            }
         }
 
         public void OpenWebsiteBrowserDetail(int idx)
         {
+            if (webSlots == null || idx < 0 || idx >= webSlots.Length || !webSlots[idx].hasItem)
+                return;
+
             CloseAllSubWindows();
             if (desktopFoldersView != null) desktopFoldersView.SetActive(false);
             if (websiteWindow != null) websiteWindow.SetActive(true);
@@ -745,28 +887,27 @@ namespace Pete.UI
 
         private void RenderWebsiteBrowserDetail(int idx)
         {
-            if (webData == null) InitTerminalData();
-            currentWebBrowserIdx = Mathf.Clamp(idx, 0, webData.Length - 1);
-            var w = webData[currentWebBrowserIdx];
+            if (webSlots == null) InitPoolsAndEmptySlots();
+            if (idx < 0 || idx >= webSlots.Length || !webSlots[idx].hasItem)
+            {
+                OpenWebsiteWindow();
+                return;
+            }
 
-            if (websiteUrlText != null) websiteUrlText.text = w.fullUrl;
+            currentWebBrowserIdx = idx;
+            var w = webSlots[currentWebBrowserIdx];
+
+            bool hiUrl = PlayerPrefs.GetInt("MM_UrlHighlight", 0) == 1;
+            if (websiteUrlText != null)
+            {
+                websiteUrlText.text = w.fullUrl;
+                websiteUrlText.color = hiUrl
+                    ? (w.isSecureHttps ? new Color(0.29f, 0.87f, 0.50f, 1f) : new Color(0.98f, 0.85f, 0.15f, 1f))
+                    : Color.white;
+            }
             if (websiteSenderNoteText != null) websiteSenderNoteText.text = w.senderNote;
             if (websiteTitleText != null) websiteTitleText.text = w.webTitle;
             if (websiteDescText != null) websiteDescText.text = w.webDesc;
-
-            if (websiteSecurityBadgeText != null)
-            {
-                websiteSecurityBadgeText.text = w.isSecureHttps ? "[HTTPS] ปลอดภัย" : "[!] HTTP ไม่ปลอดภัย";
-                websiteSecurityBadgeText.color = w.isSecureHttps
-                    ? new Color(0.53f, 0.94f, 0.67f, 1f)
-                    : new Color(0.98f, 0.80f, 0.20f, 1f);
-            }
-            if (websiteSecurityBadgeBg != null)
-            {
-                websiteSecurityBadgeBg.color = w.isSecureHttps
-                    ? new Color(0.08f, 0.33f, 0.18f, 1f)
-                    : new Color(0.28f, 0.14f, 0.04f, 1f);
-            }
 
             for (int i = 0; i < websiteFormFieldTexts.Count; i++)
             {
@@ -785,27 +926,24 @@ namespace Pete.UI
             for (int i = 0; i < websiteTabButtons.Count; i++)
             {
                 if (websiteTabButtons[i] == null) continue;
+                bool slotHasItem = (i < webSlots.Length && webSlots[i].hasItem);
+                websiteTabButtons[i].gameObject.SetActive(slotHasItem);
+                if (!slotHasItem) continue;
+
                 var img = websiteTabButtons[i].GetComponent<Image>();
                 var txt = websiteTabButtons[i].GetComponentInChildren<TextMeshProUGUI>();
                 bool sel = (i == currentWebBrowserIdx);
                 if (img != null)
                     img.color = sel ? new Color(0.29f, 0.87f, 0.50f, 1f) : new Color(0.015f, 0.08f, 0.04f, 1f);
-                if (txt != null && i < webData.Length)
+                if (txt != null)
                 {
-                    string statusSuffix = webData[i].judged ? (" • " + webData[i].judgedStatus) : "";
-                    txt.text = "► " + webData[i].tabLabel + statusSuffix;
+                    txt.text = "► " + webSlots[i].tabLabel;
                     txt.color = sel ? new Color(0.01f, 0.04f, 0.02f, 1f) : new Color(0.29f, 0.87f, 0.50f, 1f);
                 }
             }
 
-            if (websiteAcceptButton != null) websiteAcceptButton.interactable = !w.judged;
-            if (websiteDeclineButton != null) websiteDeclineButton.interactable = !w.judged;
-        }
-
-        public void OpenWebsiteDirectly(EmailDataSO email)
-        {
-            currentlySelectedWebsiteEmail = email;
-            OpenWebsiteBrowserDetail(0);
+            if (websiteAcceptButton != null) websiteAcceptButton.interactable = true;
+            if (websiteDeclineButton != null) websiteDeclineButton.interactable = true;
         }
 
         public void CloseWebsiteWindow()
@@ -824,33 +962,6 @@ namespace Pete.UI
         public void CloseRulesWindow()
         {
             ShowDesktopFolders();
-        }
-
-        public void SelectEmail(EmailDataSO email)
-        {
-            currentlySelectedEmail = email;
-            if (email == null) return;
-            if (EmailManager.Instance != null) EmailManager.Instance.MarkAsRead(email);
-            if (emailSenderText != null) emailSenderText.text = $"From: {email.senderName} <{email.senderEmail}>";
-            if (emailSubjectText != null) emailSubjectText.text = email.subject;
-            if (emailBodyText != null) emailBodyText.text = email.bodyText;
-        }
-
-        private void OnAcceptCurrentEmail()
-        {
-            if (currentlySelectedEmail != null && EmailManager.Instance != null)
-                EmailManager.Instance.AcceptEmail(currentlySelectedEmail);
-        }
-
-        private void OnDeclineCurrentEmail()
-        {
-            if (currentlySelectedEmail != null && EmailManager.Instance != null)
-                EmailManager.Instance.DeclineEmail(currentlySelectedEmail);
-        }
-
-        private void OnOpenWebsiteFromEmail()
-        {
-            OpenWebsiteBrowserDetail(0);
         }
 
         private void CloseAllSubWindows()

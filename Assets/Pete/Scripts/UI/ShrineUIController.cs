@@ -29,6 +29,14 @@ namespace Pete.UI
 
         private List<GhostChantSO> activeChants;
 
+        private void Awake()
+        {
+            if (chantNameTextA == null && chantButtonA != null)
+                chantNameTextA = chantButtonA.GetComponentInChildren<TextMeshProUGUI>(true);
+            if (chantNameTextB == null && chantButtonB != null)
+                chantNameTextB = chantButtonB.GetComponentInChildren<TextMeshProUGUI>(true);
+        }
+
         private void Start()
         {
             if (chantButtonA != null)
@@ -86,12 +94,26 @@ namespace Pete.UI
             if (chants != null && chants.Count >= 2)
             {
                 // บทสวดที่ 1
-                if (chantNameTextA != null) chantNameTextA.text = chants[0].chantName;
-                if (chantDescTextA != null) chantDescTextA.text = chants[0].chantDescription;
+                if (chantDescTextA != null)
+                {
+                    if (chantNameTextA != null) chantNameTextA.text = chants[0].chantName;
+                    chantDescTextA.text = chants[0].chantDescription;
+                }
+                else if (chantNameTextA != null)
+                {
+                    chantNameTextA.text = $"{chants[0].chantName}\n<size=75%>{chants[0].chantDescription}</size>";
+                }
 
                 // บทสวดที่ 2
-                if (chantNameTextB != null) chantNameTextB.text = chants[1].chantName;
-                if (chantDescTextB != null) chantDescTextB.text = chants[1].chantDescription;
+                if (chantDescTextB != null)
+                {
+                    if (chantNameTextB != null) chantNameTextB.text = chants[1].chantName;
+                    chantDescTextB.text = chants[1].chantDescription;
+                }
+                else if (chantNameTextB != null)
+                {
+                    chantNameTextB.text = $"{chants[1].chantName}\n<size=75%>{chants[1].chantDescription}</size>";
+                }
             }
         }
 

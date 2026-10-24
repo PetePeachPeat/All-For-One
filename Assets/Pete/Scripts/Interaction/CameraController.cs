@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using Pete.Data;
+using Pete.Systems;
 
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
@@ -14,13 +15,13 @@ namespace Pete.Interaction
 
         [Header("Horizontal Rotation (A / D)")]
         [Tooltip("ความเร็วในการหมุนกล้อง (องศาต่อวินาที)")]
-        [SerializeField] private float rotationSpeed = 90f;
+        [SerializeField] private float rotationSpeed = 100f;
         [Tooltip("เวลาในการชะลอการหมุนให้นุ่มนวล (Smooth Damping)")]
         [SerializeField] private float smoothTime = 0.12f;
 
         [Header("Seated View Reference")]
         [SerializeField] private Vector3 seatedPosition = new Vector3(0.03f, 1.31f, -9.257f);
-        [SerializeField] private float seatedPitch = 0f; // มุมก้ม/เงยคงที่เวลานั่ง
+        [SerializeField] private float seatedPitch = 0f;
 
         [Header("Inspect / Zoom Settings")]
         [SerializeField] private float inspectTransitionSpeed = 8f;
@@ -29,6 +30,7 @@ namespace Pete.Interaction
         private float currentYaw;
         private float targetYaw;
         private float yawVelocity;
+        private bool allowRightClickBack = true;
 
         public bool IsInspecting { get; private set; }
         public InspectTargetType CurrentInspectType { get; private set; } = InspectTargetType.None;
@@ -44,21 +46,43 @@ namespace Pete.Interaction
         private void Awake()
         {
             if (Instance == null) Instance = this;
-            else if (Instance != this) Destroy(gameObject);
+            else if (Instance != this) { Destroy(gameObject); return; }
+
+            Time.timeScale = 1f;
 
             targetCamera = GetComponent<Camera>();
             if (targetCamera == null) targetCamera = Camera.main;
 
-            // เริ่มต้นจากมุมมองปัจจุบันของกล้อง
             seatedPosition = transform.position;
             Vector3 angles = transform.eulerAngles;
             currentYaw = angles.y;
             targetYaw = currentYaw;
             seatedPitch = angles.x;
+
+            ApplySavedControlSettings();
+        }
+
+        public void ApplySavedControlSettings()
+        {
+            // MM_TurnSens: 1..20 (default 10 -> 100 deg/s)
+            int sens = PlayerPrefs.GetInt("MM_TurnSens", 10);
+            rotationSpeed = Mathf.Clamp(sens * 10f, 10f, 250f);
+
+            // MM_TurnSmooth: 0 = OFF, 1 = LOW, 2 = HIGH
+            int smoothMode = PlayerPrefs.GetInt("MM_TurnSmooth", 1);
+            if (smoothMode == 0) smoothTime = 0.01f;
+            else if (smoothMode == 1) smoothTime = 0.12f;
+            else smoothTime = 0.28f;
+
+            // MM_RightClickBack: 0 = OFF, 1 = ON
+            allowRightClickBack = PlayerPrefs.GetInt("MM_RightClickBack", 1) == 1;
         }
 
         private void Update()
         {
+            // ขณะกด Spacebar หลับตา จะไม่สามารถคลิกโต้ตอบวัตถุได้
+            bool eyesClosed = SanityManager.Instance != null && SanityManager.Instance.IsClosingEyes;
+
             bool exitRequested = false;
             float rotationInput = 0f;
             bool leftClick = false;
@@ -77,22 +101,21 @@ namespace Pete.Interaction
 
             if (mouse != null)
             {
-                if (mouse.rightButton.wasPressedThisFrame) exitRequested = true;
+                if (allowRightClickBack && mouse.rightButton.wasPressedThisFrame) exitRequested = true;
                 if (mouse.leftButton.wasPressedThisFrame) leftClick = true;
                 mouseScreenPos = mouse.position.ReadValue();
             }
 #else
-            if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1)) exitRequested = true;
+            if (Input.GetKeyDown(KeyCode.Escape) || (allowRightClickBack && Input.GetMouseButtonDown(1))) exitRequested = true;
             if (Input.GetKey(KeyCode.A)) rotationInput -= 1f;
             if (Input.GetKey(KeyCode.D)) rotationInput += 1f;
             if (Input.GetMouseButtonDown(0)) leftClick = true;
             mouseScreenPos = Input.mousePosition;
 #endif
 
-            // จัดการการซูมและการออกจากซูม
             if (IsInspecting)
             {
-                if (exitRequested)
+                if (exitRequested && !eyesClosed)
                 {
                     ExitInspect();
                     return;
@@ -109,17 +132,18 @@ namespace Pete.Interaction
             }
             else
             {
-                // เลื่อนกล้องกลับสู่ตำแหน่งนั่งปกติ
                 transform.position = Vector3.Lerp(transform.position, seatedPosition, Time.deltaTime * inspectTransitionSpeed);
 
-                // หมุนกล้องตามปุ่ม A / D
-                targetYaw += rotationInput * rotationSpeed * Time.deltaTime;
+                if (!eyesClosed)
+                {
+                    targetYaw += rotationInput * rotationSpeed * Time.deltaTime;
+                }
                 currentYaw = Mathf.SmoothDampAngle(currentYaw, targetYaw, ref yawVelocity, smoothTime);
 
                 transform.rotation = Quaternion.Euler(seatedPitch, currentYaw, 0f);
 
-                // ตรวจสอบการคลิกเมาส์ซ้ายเพื่อโต้ตอบวัตถุ 3D (New Input System Raycast)
-                if (leftClick)
+                bool isTransitioningToSeat = !IsInspecting && Vector3.Distance(transform.position, seatedPosition) > 0.15f;
+                if (leftClick && !eyesClosed && !isTransitioningToSeat)
                 {
                     Check3DInteractionRaycast(mouseScreenPos);
                 }
@@ -128,7 +152,6 @@ namespace Pete.Interaction
 
         private void Check3DInteractionRaycast(Vector2 screenPos)
         {
-            // ถ้าคลิกโดน UI จะไม่ยิง Raycast ทะลุไปโดนวัตถุ 3D
             if (UnityEngine.EventSystems.EventSystem.current != null &&
                 UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
             {
@@ -149,12 +172,10 @@ namespace Pete.Interaction
             }
         }
 
-        /// <summary>
-        /// ซูมกล้องไปยังจุดตรวจสอบ
-        /// </summary>
         public void Inspect(Transform anchor, InspectTargetType targetType)
         {
             if (anchor == null) return;
+            if (SanityManager.Instance != null && SanityManager.Instance.IsClosingEyes) return;
 
             currentInspectAnchor = anchor;
             inspectTargetPos = anchor.position;
@@ -166,9 +187,6 @@ namespace Pete.Interaction
             OnInspectStarted?.Invoke(targetType);
         }
 
-        /// <summary>
-        /// ออกจากโหมดซูม กลับสู่ท่านั่งหมุนกล้องปกติ
-        /// </summary>
         public void ExitInspect()
         {
             if (!IsInspecting) return;
@@ -183,6 +201,11 @@ namespace Pete.Interaction
         public void SetRotationSpeed(float speed)
         {
             rotationSpeed = Mathf.Max(10f, speed);
+        }
+
+        public void SetSmoothTime(float smooth)
+        {
+            smoothTime = Mathf.Max(0.005f, smooth);
         }
     }
 }

@@ -73,7 +73,8 @@ namespace Pete.Systems
             // เล่นเสียงแจ้งเตือน
             if (notificationAudioSource != null && emailPingClip != null)
             {
-                notificationAudioSource.PlayOneShot(emailPingClip);
+                float sfxVol = PlayerPrefs.GetInt("MM_VolSfx", 85) / 100f;
+                notificationAudioSource.PlayOneShot(emailPingClip, Mathf.Clamp01(0.85f * sfxVol));
             }
 
             OnEmailReceived?.Invoke(email);

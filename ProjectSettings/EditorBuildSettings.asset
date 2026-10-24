@@ -11,8 +11,5 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Cee/test.unity
     guid: e0a8a00db332c25419752c8215df071d
-  - enabled: 1
-    path: Assets/Cee/map.unity
-    guid: b3f20df5dd0400749a612f7b2c376d23
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
